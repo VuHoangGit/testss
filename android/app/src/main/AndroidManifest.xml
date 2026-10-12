@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <!-- API backend chạy localhost/emulator -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="testss"
         android:name="${applicationName}"

@@ -3,7 +3,7 @@
 /// - 401 → single-flight refresh (EC-31) → thử lại request gốc đúng 1 lần.
 /// - Refresh fail vì phiên chết ([AuthException]) → báo onSessionExpired (EC-17).
 /// - Refresh fail vì hạ tầng ([NetworkException]) → KHÔNG logout, giữ token (EC-16).
-/// - Cờ loggingOut chặn refresh trong lúc đang logout (EC-33).
+/// - Cờ isLoggingOut chặn refresh trong lúc đang logout (EC-33).
 library;
 
 import 'package:dio/dio.dart';
@@ -13,32 +13,27 @@ import 'session_refresher.dart';
 
 class AuthInterceptor extends Interceptor {
   AuthInterceptor({
-    required String? Function() getAccessToken,
-    required Future<void> Function() refresh,
-    required void Function() onSessionExpired,
-    required Dio dio,
+    required this.getAccessToken,
+    required this.refresh,
+    required this.onSessionExpired,
+    required this.dio,
     SessionRefresher? refresher,
-  })  : _getAccessToken = getAccessToken,
-        _refresh = refresh,
-        _onSessionExpired = onSessionExpired,
-        _dio = dio,
-        _refresher = refresher ?? SessionRefresher();
+  }) : _refresher = refresher ?? SessionRefresher();
 
-  final String? Function() _getAccessToken;
-  final Future<void> Function() _refresh;
-  final void Function() _onSessionExpired;
-  final Dio _dio;
+  final String? Function() getAccessToken;
+  final Future<void> Function() refresh;
+  final void Function() onSessionExpired;
+  final Dio dio;
   final SessionRefresher _refresher;
 
   bool _isLoggingOut = false;
 
   /// Bật khi logout đang chạy để 401 ruột không kích hoạt refresh (EC-33).
-  // ignore: avoid_setters_without_getters
   set isLoggingOut(bool value) => _isLoggingOut = value;
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final String? token = _getAccessToken();
+    final String? token = getAccessToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
@@ -66,9 +61,9 @@ class AuthInterceptor extends Interceptor {
     }
 
     try {
-      await _refresher.run(_refresh);
+      await _refresher.run(refresh);
     } on AuthException {
-      _onSessionExpired();
+      onSessionExpired();
       handler.next(err);
       return;
     } on NetworkException {
@@ -80,11 +75,11 @@ class AuthInterceptor extends Interceptor {
     }
 
     // Refresh xong → thử lại request gốc với token mới
-    final String? token = _getAccessToken();
+    final String? token = getAccessToken();
     options.headers['Authorization'] = 'Bearer $token';
     options.extra['retried'] = true;
     try {
-      final Response<dynamic> response = await _dio.fetch<dynamic>(options);
+      final Response<dynamic> response = await dio.fetch<dynamic>(options);
       handler.resolve(response);
     } on DioException catch (retryError) {
       handler.next(retryError);
