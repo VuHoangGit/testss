@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+sqlalchemy>=2.0.36
+psycopg[binary]>=3.2
+alembic>=1.14
+pydantic-settings>=2.6
+google-auth>=2.36
+requests>=2.32
+PyJWT>=2.10

@@ -1,0 +1,21 @@
+services:
+  db:
+    # Ảnh có sẵn pgvector — Sprint 6 (RAG chatbot) dùng ngay, không phải chuyển ảnh
+    image: pgvector/pgvector:pg16
+    container_name: docuvault-db
+    environment:
+      POSTGRES_USER: docuvault
+      POSTGRES_PASSWORD: docuvault
+      POSTGRES_DB: docuvault
+    ports:
+      - "5432:5432"
+    volumes:
+      - docuvault_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docuvault -d docuvault"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  docuvault_pgdata:
