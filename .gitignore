@@ -59,3 +59,4 @@ backend/.pytest_cache/
 backend/.ruff_cache/
 backend/.env
 *.egg-info/
+backend/storage/
