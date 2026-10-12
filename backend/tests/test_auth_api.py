@@ -28,7 +28,7 @@ def _login(client, monkeypatch, identity: GoogleIdentity, device_info=None):
 def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    assert resp.json()["status"] == "ok"
 
 
 def test_login_happy_path(client, monkeypatch, make_identity, db_session_factory):
@@ -222,3 +222,56 @@ def test_me_session_revoked_directly_in_db(client, monkeypatch, make_identity, d
     )
     assert resp.status_code == 401
     assert "thu hồi" in resp.json()["detail"]
+
+
+# ---------- Dev login (dùng cho demo khi chưa cấu hình Google OAuth) ----------
+
+def _enable_dev_login(monkeypatch) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "allow_dev_login", True)
+
+
+def test_health_reports_dev_login_off_by_default(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["dev_login"] is False
+
+
+def test_dev_login_disabled_by_default(client):
+    resp = client.post(
+        "/api/v1/auth/dev", json={"email": "dev@docuvault.local", "name": "Dev"}
+    )
+    assert resp.status_code == 403
+
+
+def test_dev_login_creates_user_and_session(client, monkeypatch, db_session_factory):
+    _enable_dev_login(monkeypatch)
+    resp = client.post(
+        "/api/v1/auth/dev", json={"email": "dev@docuvault.local", "name": "Dev User"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["user"]["email"] == "dev@docuvault.local"
+    assert body["access_token"] and body["refresh_token"]
+
+    # Đăng nhập lần 2 cùng email → không tạo user mới (idempotent)
+    resp2 = client.post(
+        "/api/v1/auth/dev", json={"email": "dev@docuvault.local", "name": "Dev User"}
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["user"]["id"] == body["user"]["id"]
+
+    with db_session_factory() as db:
+        from sqlalchemy import func, select
+
+        from app.models.user import User
+
+        assert db.scalar(select(func.count()).select_from(User)) == 1
+
+    # Token dev dùng được cho /me
+    me = client.get(
+        "/api/v1/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"}
+    )
+    assert me.status_code == 200
+    assert me.json()["name"] == "Dev User"

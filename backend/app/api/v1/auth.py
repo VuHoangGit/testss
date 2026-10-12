@@ -1,13 +1,15 @@
-"""Endpoints xác thực: /auth/google, /auth/refresh, /auth/logout, /auth/me.
+"""Endpoints xác thực: /auth/google, /auth/dev, /auth/refresh, /auth/logout, /auth/me.
 
 AuthError phát từ bất kỳ lớp nào sẽ được exception handler ở main.py map ra 401.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.api.deps import CurrentUser, DbSession
+from app.core.config import get_settings
 from app.core.google import GoogleIdentity, verify_google_id_token
 from app.schemas.auth import (
+    DevLoginRequest,
     GoogleLoginRequest,
     RefreshRequest,
     RefreshResponse,
@@ -24,6 +26,23 @@ def login_with_google(body: GoogleLoginRequest, db: DbSession) -> TokenResponse:
     """Luồng L2: client gửi id_token từ Google SDK, backend verify + cấp cặp token."""
     identity: GoogleIdentity = verify_google_id_token(body.id_token)
     user, session, refresh_token = auth_service.login_with_google(db, identity, body.device_info)
+    access_token, expires_in = auth_service.issue_tokens(user, session)
+    db.commit()
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=expires_in,
+        user=UserOut.model_validate(user),
+    )
+
+
+@router.post("/dev", response_model=TokenResponse)
+def dev_login(body: DevLoginRequest, db: DbSession) -> TokenResponse:
+    """Đăng nhập nhanh KHÔNG qua Google — chỉ hoạt động khi ALLOW_DEV_LOGIN=true (dev/demo)."""
+    if not get_settings().allow_dev_login:
+        raise HTTPException(status_code=403, detail="Chế độ đăng nhập nhanh đang tắt")
+    user = auth_service.get_or_create_dev_user(db, body.email, body.name)
+    session, refresh_token = auth_service.create_session(db, user.id, {"platform": "dev"})
     access_token, expires_in = auth_service.issue_tokens(user, session)
     db.commit()
     return TokenResponse(

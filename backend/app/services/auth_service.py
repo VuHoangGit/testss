@@ -6,7 +6,6 @@ revoke → 401 nghiêm ngặt (EC-11) — client chống race bằng single-flig
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -56,6 +55,14 @@ def upsert_user_by_google(db: Session, identity: GoogleIdentity) -> User:
         user.avatar_url = identity.avatar_url
         db.flush()
     return user
+
+
+def get_or_create_dev_user(db: Session, email: str, name: str | None) -> User:
+    """User giả cho dev-login — google_sub suy từ email để idempotent qua các lần đăng nhập."""
+    return upsert_user_by_google(
+        db,
+        GoogleIdentity(google_sub=f"dev:{email}", email=email, name=name, avatar_url=None),
+    )
 
 
 def create_session(
@@ -132,7 +139,7 @@ def issue_tokens(user: User, session: UserSession) -> tuple[str, int]:
     return access_token, settings.access_token_minutes * 60
 
 
-def load_session_and_user(db: Session, payload: dict[str, Any]) -> tuple[UserSession, User]:
+def load_session_and_user(db: Session, payload: dict) -> tuple[UserSession, User]:
     """Từ claim JWT load session + user còn hiệu lực; đã revoke/xóa → AuthError (EC-17/18)."""
     try:
         session_id = uuid.UUID(str(payload.get("sid")))

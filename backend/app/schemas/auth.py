@@ -10,6 +10,11 @@ class GoogleLoginRequest(BaseModel):
     device_info: dict[str, str] | None = None
 
 
+class DevLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    name: str | None = Field(default=None, max_length=255)
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(min_length=20)
 

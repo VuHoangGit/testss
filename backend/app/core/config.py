@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     app_name: str = "DocuVault API"
     environment: str = "dev"
 
-    # SQLAlchemy 2.0 + psycopg3 (sync)
+    # SQLAlchemy 2.0 + psycopg3 (sync). Dev không có Docker có thể dùng sqlite:///...
     database_url: str = "postgresql+psycopg://docuvault:docuvault@localhost:5432/docuvault"
 
     # JWT
@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     allowed_email_domains: str = ""
     # Origin được phép gọi API (CORS), phân cách bằng dấu phẩy; rỗng = tắt
     cors_origins: str = ""
+    # Bật POST /auth/dev (đăng nhập nhanh không cần Google) — CHỈ cho dev/demo
+    allow_dev_login: bool = False
 
     @property
     def google_client_id_list(self) -> list[str]:

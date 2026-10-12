@@ -29,8 +29,10 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix="/api/v1")
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, object]:
+        # Đọc lúc request để test có thể bật/tắt allow_dev_login động
+        s = get_settings()
+        return {"status": "ok", "app": s.app_name, "dev_login": s.allow_dev_login}
 
     return app
 
