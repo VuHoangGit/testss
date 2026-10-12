@@ -2,7 +2,7 @@
 ///
 /// Ví dụ chạy:
 /// ```
-/// flutter run --dart-define=API_BASE_URL=http://localhost:8000
+/// flutter run --dart-define=API_BASE_URL=http://localhost:8000/api/v1
 /// ```
 library;
 
@@ -11,16 +11,17 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   AppConfig._();
 
-  /// Base URL backend. Web chạy ở Edge/Chrome dùng localhost; Android emulator
-  /// trỏ 10.0.2.2 (localhost của máy). Ghi đè bằng --dart-define=API_BASE_URL=...
+  /// Base URL backend (đã gồm tiền tố /api/v1). Web chạy ở Edge/Chrome dùng
+  /// localhost; Android emulator trỏ 10.0.2.2 (localhost của máy). Ghi đè bằng
+  /// --dart-define=API_BASE_URL=... (phải gồm /api/v1, vd http://10.0.2.2:8000/api/v1).
   static String get apiBaseUrl {
     const String defined = String.fromEnvironment('API_BASE_URL');
     if (defined.isNotEmpty) return defined;
-    if (kIsWeb) return 'http://localhost:8000';
+    if (kIsWeb) return 'http://localhost:8000/api/v1';
     if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
-      return 'http://10.0.2.2:8000';
+      return 'http://10.0.2.2:8000/api/v1';
     }
-    return 'http://localhost:8000';
+    return 'http://localhost:8000/api/v1';
   }
 
   /// Web client ID (Google OAuth) — dùng khi tích hợp đăng nhập Google thật.
