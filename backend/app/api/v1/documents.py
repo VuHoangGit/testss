@@ -213,6 +213,8 @@ def protect_document(
     if doc.mime_type != _PDF_MIME:
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file PDF")
     data = storage_service.read_document_bytes(doc.storage_key)
+    # Đếm trang TRƯỚC khi mã hóa — PDF mã hóa đọc được số trang khó
+    total_pages = pdf_service.pdf_page_count(data)
     try:
         protected = pdf_service.protect_pdf(data, body.password)
     except ValueError as exc:
@@ -223,6 +225,7 @@ def protect_document(
         db, owner_id=user.id, data=protected,
         name=f"{base} (mat-khau).pdf", folder_id=doc.folder_id,
     )
+    new_doc.page_count = total_pages
     db.commit()
     return DocumentOut.model_validate(new_doc)
 
