@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     cors_origins: str = ""
     # Bật POST /auth/dev (đăng nhập nhanh không cần Google) — CHỈ cho dev/demo
     allow_dev_login: bool = False
+    # Thư mục chứa file tài liệu upload (Sprint 2). Rỗng = backend/storage/documents
+    documents_dir: str = ""
+    # Giới hạn dung lượng 1 file upload (MB)
+    max_upload_mb: int = 50
 
     @property
     def google_client_id_list(self) -> list[str]:

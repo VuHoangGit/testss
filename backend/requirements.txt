@@ -7,3 +7,6 @@ pydantic-settings>=2.6
 google-auth>=2.36
 requests>=2.32
 PyJWT>=2.10
+python-multipart>=0.0.17
+pypdf>=5
+cryptography>=43
