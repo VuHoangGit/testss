@@ -60,3 +60,6 @@ backend/.ruff_cache/
 backend/.env
 *.egg-info/
 backend/storage/
+# DB SQLite demo (chứa dữ liệu local, không commit)
+backend/*.db
+backend/*.db-journal

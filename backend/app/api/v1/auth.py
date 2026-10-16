@@ -11,8 +11,11 @@ from app.core.google import GoogleIdentity, verify_google_id_token
 from app.schemas.auth import (
     DevLoginRequest,
     GoogleLoginRequest,
+    PasswordLoginRequest,
     RefreshRequest,
     RefreshResponse,
+    RegisterRequest,
+    RegisterResponse,
     TokenResponse,
     UserOut,
 )
@@ -80,3 +83,30 @@ def me(current: CurrentUser) -> UserOut:
     """Thông tin user của phiên hiện tại (Shell dùng hiển thị tên/avatar)."""
     _, user = current
     return UserOut.model_validate(user)
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=201)
+def register(body: RegisterRequest, db: DbSession) -> RegisterResponse:
+    """Đăng ký tài khoản email/mật khẩu. KHÔNG tự đăng nhập — client phải gọi /auth/login."""
+    try:
+        user = auth_service.register_user(db, body.email, body.password, body.name)
+    except auth_service.EmailAlreadyRegisteredError as exc:
+        raise HTTPException(status_code=409, detail="Email đã được đăng ký") from exc
+    db.commit()
+    return RegisterResponse(message="Đăng ký thành công. Hãy đăng nhập.", email=user.email)
+
+
+@router.post("/login", response_model=TokenResponse)
+def login(body: PasswordLoginRequest, db: DbSession) -> TokenResponse:
+    """Đăng nhập email/mật khẩu → cấp cặp token như các luồng khác."""
+    user, session, refresh_token = auth_service.login_with_password(
+        db, body.email, body.password, body.device_info
+    )
+    access_token, expires_in = auth_service.issue_tokens(user, session)
+    db.commit()
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=expires_in,
+        user=UserOut.model_validate(user),
+    )

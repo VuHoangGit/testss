@@ -29,6 +29,32 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     }
   }
 
+  /// Đăng nhập email/mật khẩu. Lỗi KHÔNG đưa vào state (tránh AuthGate hiện
+  /// màn hình lỗi toàn màn) — ném lại để LoginScreen hiện SnackBar.
+  Future<void> signIn({required String email, required String password}) async {
+    final AuthRepository repo = ref.read(authRepositoryProvider);
+    state = const AsyncValue<AuthSession?>.loading();
+    try {
+      final AuthSession session = await repo.login(email: email, password: password);
+      state = AsyncValue<AuthSession?>.data(session);
+    } on Exception {
+      // Về trạng thái chưa đăng nhập → ở lại màn hình login
+      state = const AsyncValue<AuthSession?>.data(null);
+      rethrow;
+    }
+  }
+
+  /// Đăng ký tài khoản. Không đổi state (vẫn chưa đăng nhập); lỗi ném về UI.
+  Future<void> signUp({
+    required String email,
+    required String password,
+    String? name,
+  }) async {
+    await ref
+        .read(authRepositoryProvider)
+        .register(email: email, password: password, name: name);
+  }
+
   /// Đăng xuất chủ động: revoke server (best-effort) + xóa local.
   Future<void> signOut() async {
     final AuthRepository repo = ref.read(authRepositoryProvider);

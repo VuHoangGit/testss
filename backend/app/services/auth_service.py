@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.google import GoogleIdentity
+from app.core.passwords import hash_password, verify_password
 from app.core.security import (
     AuthError,
     create_access_token,
@@ -154,3 +155,55 @@ def load_session_and_user(db: Session, payload: dict) -> tuple[UserSession, User
     if session.revoked_at is not None:
         raise AuthError("Phiên đăng nhập đã bị thu hồi")
     return session, user
+
+
+class EmailAlreadyRegisteredError(Exception):
+    """Email đã đăng ký tài khoản mật khẩu — endpoint map ra 409."""
+
+
+def register_user(db: Session, email: str, password: str, name: str | None) -> User:
+    """Đăng ký email/mật khẩu. Email đã có tài khoản Google (chưa mật khẩu) → gắn
+    mật khẩu vào luôn, không tạo dòng user trùng email.
+
+    Ném [EmailAlreadyRegisteredError] nếu email đã có mật khẩu.
+    """
+    normalized = email.strip().lower()
+    existing = db.scalar(select(User).where(User.email == normalized))
+    if existing is not None:
+        if existing.password_hash is not None:
+            raise EmailAlreadyRegisteredError(normalized)
+        existing.password_hash = hash_password(password)
+        if name:
+            existing.name = name
+        db.flush()
+        return existing
+    user = User(
+        google_sub=None,
+        email=normalized,
+        name=name,
+        password_hash=hash_password(password),
+    )
+    db.add(user)
+    db.flush()
+    return user
+
+
+def login_with_password(
+    db: Session,
+    email: str,
+    password: str,
+    device_info: dict[str, str] | None,
+) -> tuple[User, UserSession, str]:
+    """Đăng nhập email/mật khẩu → (user, session, refresh_token).
+
+    Sai email/mật khẩu/tài khoản chưa có mật khẩu → AuthError (401) — thông báo
+    chung tránh lộ email nào tồn tại.
+    """
+    normalized = email.strip().lower()
+    user = db.scalar(select(User).where(User.email == normalized))
+    if user is None or user.password_hash is None:
+        raise AuthError("Email hoặc mật khẩu không đúng")
+    if not verify_password(password, user.password_hash):
+        raise AuthError("Email hoặc mật khẩu không đúng")
+    session, refresh_token = create_session(db, user.id, device_info)
+    return user, session, refresh_token

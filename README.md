@@ -15,16 +15,25 @@ công cụ PDF, OCR, so sánh hợp đồng, chatbot RAG. Hiện hoàn thành **
 
 ```powershell
 cd C:\Users\hoang\Downloads\testss\backend
-# Lần đầu: tạo DB (dùng SQLite nếu không có Postgres/Docker)
-$env:DATABASE_URL = "sqlite:///./docuvault.db"
-$env:ALLOW_DEV_LOGIN = "true"          # bật đăng nhập nhanh cho dev/demo
+# Lần đầu: tạo DB (SQLite — không cần Docker, đã trỏ sẵn trong backend/.env)
 .\.venv\Scripts\python.exe -m alembic upgrade head
+# Tạo/cập nhật tài khoản demo để đăng nhập (chạy lại bao nhiêu lần cũng được)
+.\.venv\Scripts\python.exe scripts\seed_demo_user.py
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-Kiểm tra: mở `http://localhost:8000/health` → `{"status":"ok","dev_login":true}`.
+Kiểm tra: mở `http://localhost:8000/health` → `{"status":"ok","dev_login":false}`.
 
-> Muốn dùng PostgreSQL thật: bật Docker Desktop → `docker compose up -d` (ở gốc repo) → bỏ `$env:DATABASE_URL` (backend mặc định trỏ Postgres `docuvault:docuvault@localhost:5432`) → chạy lại `alembic upgrade head`.
+> Muốn dùng PostgreSQL thật: bật Docker Desktop → `docker compose up -d` (ở gốc repo) → sửa `DATABASE_URL` trong `backend/.env` thành `postgresql+psycopg://docuvault:docuvault@localhost:5432/docuvault` → chạy lại `alembic upgrade head` + seed.
+
+### Tài khoản demo
+
+| Email | Mật khẩu |
+|---|---|
+| `hoang@gmail.com` | `123456` |
+
+Tạo bằng `backend/scripts/seed_demo_user.py` (idempotent — user đã có thì reset mật khẩu về `123456`).
+Trên màn Login cũng có thể bấm **"Chưa có tài khoản? Đăng ký"** để tự tạo tài khoản mới (mật khẩu ≥ 6 ký tự).
 
 ### 2. Chạy app Flutter (web — máy này chỉ chạy được Edge)
 
@@ -36,7 +45,8 @@ $env:Path = "C:\Users\hoang\flutter\bin;$env:Path"
 flutter run -d edge
 ```
 
-- Đăng nhập: tab mở ra → nhập email + tên → **"Vào ứng dụng"** (dev login, không cần mật khẩu).
+- Đăng nhập: điền **`hoang@gmail.com`** / **`123456`** → bấm **"Đăng nhập"**.
+  (hoặc bấm "Chưa có tài khoản? Đăng ký" để tạo tài khoản mới; sai email/mật khẩu sẽ bị từ chối 401)
 - Tab **Tài liệu**: "Tải lên" (chọn file, xem tiến độ), "Thư mục mới", chip thư mục để lọc,
   menu ⋮ mỗi file: **Tải xuống / Tách trang / Đặt mật khẩu / Gỡ mật khẩu / Xóa**,
   nút **"Chọn để gộp"**: tích ≥2 PDF → đặt tên → gộp thành file mới (bản gốc giữ nguyên).
@@ -61,8 +71,9 @@ flutter test
 backend/                 FastAPI + SQLAlchemy + Alembic
   app/api/v1/            auth, folders, documents
   app/services/          auth, storage (đĩa cục bộ), pdf (pypdf)
-  migrations/            0001 users+sessions, 0002 folders+documents+permissions
-  tests/                 pytest (71 test)
+  migrations/            0001 users+sessions, 0002 folders+documents+permissions, 0003 password login
+  scripts/               seed_demo_user.py (tài khoản demo)
+  tests/                 pytest (84 test)
 lib/                     Flutter Clean Architecture
   core/                  config, lỗi, Dio + interceptor refresh token, file saver
   domain/                entities + repository interfaces
@@ -86,9 +97,10 @@ docs/                    phân tích nghiệp vụ sprint 1
    ```
 5. Backend cần biến `GOOGLE_CLIENT_IDS` chứa các client ID (phân cách bởi dấu phẩy) để verify `aud`.
 
-Lưu ý: hiện app dùng **dev login** (không mật khẩu) để demo nhanh; luồng Google
+Lưu ý: app hiện đăng nhập bằng **email + mật khẩu** (tài khoản demo ở trên). Luồng Google
 (google_sign_in 7.x trên mobile, loopback+PKCE trên desktop) đã code sẵn trong
-`lib/core/auth/` — chỉ còn wire vào màn Login khi có client ID.
+`lib/core/auth/` — chỉ còn wire vào màn Login khi có client ID. `POST /auth/dev` (đăng nhập
+nhanh không mật khẩu) đã **tắt** qua `ALLOW_DEV_LOGIN=false` trong `backend/.env`.
 
 ## Biến môi trường backend (`.env` hoặc set thủ công)
 

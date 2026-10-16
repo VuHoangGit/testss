@@ -60,7 +60,7 @@ void main() {
   });
 
   test('devLogin → lưu token + trả session đúng user', () async {
-    when(() => dio.post<dynamic>('/api/v1/auth/dev',
+    when(() => dio.post<dynamic>('/auth/dev',
             data: any(named: 'data')))
         .thenAnswer((Invocation _) async => _res(tokenJson));
 
@@ -89,7 +89,7 @@ void main() {
       'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 - 100,
     });
     storage.refresh = 'r-1';
-    when(() => dio.post<dynamic>('/api/v1/auth/refresh',
+    when(() => dio.post<dynamic>('/auth/refresh',
             data: any(named: 'data')))
         .thenAnswer((Invocation _) async => _res(tokenJson));
 
@@ -105,7 +105,7 @@ void main() {
       'exp': DateTime.now().millisecondsSinceEpoch ~/ 1000 - 100,
     });
     storage.refresh = 'r-1';
-    when(() => dio.post<dynamic>('/api/v1/auth/refresh',
+    when(() => dio.post<dynamic>('/auth/refresh',
             data: any(named: 'data')))
         .thenThrow(
       DioException(requestOptions: RequestOptions(path: ''), response:
@@ -123,7 +123,7 @@ void main() {
   test('logout: revoke server OK → xóa local (EC-18/20)', () async {
     storage.access = tokenJson['access_token'];
     storage.refresh = 'r-1';
-    when(() => dio.post<dynamic>('/api/v1/auth/logout',
+    when(() => dio.post<dynamic>('/auth/logout',
             options: any(named: 'options')))
         .thenAnswer((Invocation _) async =>
             _res(<String, dynamic>{'detail': 'Đã đăng xuất'}));
@@ -137,7 +137,7 @@ void main() {
   test('logout: backend chết (NetworkException) → vẫn xóa local (EC-18)', () async {
     storage.access = tokenJson['access_token'];
     storage.refresh = 'r-1';
-    when(() => dio.post<dynamic>('/api/v1/auth/logout',
+    when(() => dio.post<dynamic>('/auth/logout',
             options: any(named: 'options')))
         .thenThrow(DioException(
       requestOptions: RequestOptions(path: ''),
@@ -178,5 +178,66 @@ void main() {
       ),
     ));
     expect(e, isA<NetworkException>());
+  });
+
+  test('login email/mật khẩu → POST /auth/login + lưu token', () async {
+    when(() => dio.post<dynamic>('/auth/login', data: any(named: 'data')))
+        .thenAnswer((Invocation _) async => _res(tokenJson));
+
+    final session = await repo.login(email: 'a@gmail.com', password: '123456');
+
+    expect(session.user.email, 'a@gmail.com');
+    expect(storage.access, tokenJson['access_token']);
+    expect(repo.cachedAccessToken, tokenJson['access_token']);
+  });
+
+  test('login sai mật khẩu 401 → AuthException kèm detail server', () async {
+    when(() => dio.post<dynamic>('/auth/login', data: any(named: 'data')))
+        .thenThrow(DioException(
+      requestOptions: RequestOptions(path: ''),
+      response: Response<dynamic>(
+        requestOptions: RequestOptions(path: ''),
+        statusCode: 401,
+        data: <String, dynamic>{'detail': 'Email hoặc mật khẩu không đúng'},
+      ),
+    ));
+
+    await expectLater(
+      repo.login(email: 'a@gmail.com', password: '999999'),
+      throwsA(isA<AuthException>()
+          .having((AuthException e) => e.message, 'message', 'Email hoặc mật khẩu không đúng')),
+    );
+    expect(storage.access, isNull);
+  });
+
+  test('register → POST /auth/register, KHÔNG lưu token', () async {
+    when(() => dio.post<dynamic>('/auth/register', data: any(named: 'data')))
+        .thenAnswer((Invocation _) async => _res(<String, dynamic>{
+              'message': 'Đăng ký thành công. Hãy đăng nhập.',
+              'email': 'a@gmail.com',
+            }));
+
+    await repo.register(email: 'a@gmail.com', password: '123456');
+
+    expect(storage.access, isNull);
+    expect(repo.cachedAccessToken, isNull);
+  });
+
+  test('register trùng email 409 → AuthException kèm detail server', () async {
+    when(() => dio.post<dynamic>('/auth/register', data: any(named: 'data')))
+        .thenThrow(DioException(
+      requestOptions: RequestOptions(path: ''),
+      response: Response<dynamic>(
+        requestOptions: RequestOptions(path: ''),
+        statusCode: 409,
+        data: <String, dynamic>{'detail': 'Email đã được đăng ký'},
+      ),
+    ));
+
+    await expectLater(
+      repo.register(email: 'a@gmail.com', password: '123456'),
+      throwsA(isA<AuthException>()
+          .having((AuthException e) => e.message, 'message', 'Email đã được đăng ký')),
+    );
   });
 }

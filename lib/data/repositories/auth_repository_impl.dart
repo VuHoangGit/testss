@@ -28,8 +28,38 @@ class AuthRepositoryImpl implements AuthRepository {
   Future<AuthSession> devLogin({required String email, String? name}) async {
     try {
       final Response<dynamic> res = await dio.post<dynamic>(
-        '/api/v1/auth/dev',
+        '/auth/dev',
         data: <String, dynamic>{'email': email, 'name': name},
+      );
+      return await _persist(TokenResponseModel.fromJson(_map(res)));
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
+  @override
+  Future<void> register({
+    required String email,
+    required String password,
+    String? name,
+  }) async {
+    try {
+      await dio.post<dynamic>(
+        '/auth/register',
+        data: <String, dynamic>{'email': email, 'password': password, 'name': name},
+      );
+    } on DioException catch (e) {
+      // 409 → detail "Email đã được đăng ký" từ server (mapDioException xử lý)
+      throw mapDioException(e);
+    }
+  }
+
+  @override
+  Future<AuthSession> login({required String email, required String password}) async {
+    try {
+      final Response<dynamic> res = await dio.post<dynamic>(
+        '/auth/login',
+        data: <String, dynamic>{'email': email, 'password': password},
       );
       return await _persist(TokenResponseModel.fromJson(_map(res)));
     } on DioException catch (e) {
@@ -67,7 +97,7 @@ class AuthRepositoryImpl implements AuthRepository {
     }
     try {
       final Response<dynamic> res = await dio.post<dynamic>(
-        '/api/v1/auth/refresh',
+        '/auth/refresh',
         data: <String, dynamic>{'refresh_token': refresh},
       );
       return await _persist(TokenResponseModel.fromJson(_map(res)));
@@ -106,7 +136,7 @@ class AuthRepositoryImpl implements AuthRepository {
     final String? access = _accessToken;
     if (access == null) return;
     await dio.post<dynamic>(
-      '/api/v1/auth/logout',
+      '/auth/logout',
       options: Options(
         headers: <String, String>{'Authorization': 'Bearer $access'},
         receiveTimeout: const Duration(seconds: 3),

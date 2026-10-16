@@ -41,3 +41,25 @@ class RefreshResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+
+
+# Email đăng ký/đăng nhập mật khẩu: check cơ chế (có @ + domain), không đòi
+# email-validator (dependency chưa có trong requirements)
+_EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320, pattern=_EMAIL_PATTERN)
+    password: str = Field(min_length=6, max_length=128)
+    name: str | None = Field(default=None, max_length=255)
+
+
+class PasswordLoginRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320, pattern=_EMAIL_PATTERN)
+    password: str = Field(min_length=6, max_length=128)
+    device_info: dict[str, str] | None = None
+
+
+class RegisterResponse(BaseModel):
+    message: str
+    email: str
