@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/navigation/root_navigator_key.dart';
 import 'core/theme/app_theme.dart';
 import 'domain/entities/user.dart';
 import 'presentation/login/login_screen.dart';
@@ -20,6 +21,7 @@ class DocuVaultApp extends ConsumerWidget {
       title: 'DocuVault',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      navigatorKey: rootNavigatorKey,
       home: const AuthGate(),
     );
   }

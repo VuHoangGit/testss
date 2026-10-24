@@ -7,13 +7,6 @@ import '../documents/documents_providers.dart';
 import 'ai_providers.dart';
 import 'ai_widgets.dart';
 
-class _ChatMessage {
-  const _ChatMessage({required this.text, required this.fromUser});
-
-  final String text;
-  final bool fromUser;
-}
-
 class AiChatScreen extends ConsumerStatefulWidget {
   const AiChatScreen({super.key});
 
@@ -24,13 +17,6 @@ class AiChatScreen extends ConsumerStatefulWidget {
 class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   final TextEditingController _question = TextEditingController();
   final ScrollController _scroll = ScrollController();
-  final List<_ChatMessage> _messages = <_ChatMessage>[
-    const _ChatMessage(
-      text: 'Xin chào! Hãy chọn một tài liệu và đặt câu hỏi, tôi sẽ trả lời dựa trên nội dung PDF đó.',
-      fromUser: false,
-    ),
-  ];
-  String? _documentId;
   bool _busy = false;
 
   @override
@@ -42,24 +28,23 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
   Future<void> _send() async {
     final String question = _question.text.trim();
-    if (_busy || question.isEmpty || _documentId == null) return;
+    final String? documentId = ref.read(aiDocumentIdProvider);
+    if (_busy || question.isEmpty || documentId == null) return;
     _question.clear();
-    setState(() {
-      _messages.add(_ChatMessage(text: question, fromUser: true));
-      _busy = true;
-    });
+    setState(() => _busy = true);
+    final ChatMessagesController messages =
+        ref.read(chatMessagesProvider.notifier);
+    messages.add(question, fromUser: true);
     _scrollToBottom();
     try {
       final AiRepository ai = ref.read(aiRepositoryProvider);
-      final String answer = await ai.chat(question, documentIds: <String>[_documentId!]);
-      if (mounted) {
-        setState(() => _messages.add(_ChatMessage(text: answer, fromUser: false)));
-        _scrollToBottom();
-      }
+      final String answer =
+          await ai.chat(question, documentIds: <String>[documentId]);
+      messages.add(answer, fromUser: false);
+      ref.read(lastAiResultsProvider.notifier).setChat(question, answer);
+      _scrollToBottom();
     } on Exception catch (error) {
-      if (mounted) {
-        setState(() => _messages.add(_ChatMessage(text: '$error', fromUser: false)));
-      }
+      messages.add('$error', fromUser: false);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -82,6 +67,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
             const <DocumentItem>[];
+    final List<ChatMessage> messages = ref.watch(chatMessagesProvider);
+    final String? documentId = ref.watch(aiDocumentIdProvider);
     return Column(
       children: <Widget>[
         Padding(
@@ -96,8 +83,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
               const SizedBox(height: 16),
               AiDocumentPicker(
                 documents: documents,
-                value: _documentId,
-                onChanged: _busy ? null : (String? value) => setState(() => _documentId = value),
+                value: documentId,
+                onChanged: _busy
+                    ? null
+                    : (String? value) =>
+                        ref.read(aiDocumentIdProvider.notifier).select(value),
               ),
             ],
           ),
@@ -106,12 +96,12 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           child: ListView.builder(
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-            itemCount: _messages.length + (_busy ? 1 : 0),
+            itemCount: messages.length + (_busy ? 1 : 0),
             itemBuilder: (BuildContext context, int index) {
-              if (_busy && index == _messages.length) {
+              if (_busy && index == messages.length) {
                 return const _ChatBubble(text: 'AI đang suy nghĩ...', fromUser: false, pending: true);
               }
-              final _ChatMessage message = _messages[index];
+              final ChatMessage message = messages[index];
               return _ChatBubble(text: message.text, fromUser: message.fromUser);
             },
           ),
@@ -131,13 +121,13 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
-                  hintText: _documentId == null
+                  hintText: documentId == null
                       ? 'Chọn tài liệu trước khi hỏi...'
                       : 'Nhập câu hỏi cho AI...',
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   suffixIcon: IconButton(
-                    onPressed: _question.text.trim().isEmpty || _documentId == null || _busy
+                    onPressed: _question.text.trim().isEmpty || documentId == null || _busy
                         ? null
                         : _send,
                     icon: const Icon(Icons.arrow_upward_rounded),

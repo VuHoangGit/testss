@@ -14,7 +14,6 @@ class AiTranslateScreen extends ConsumerStatefulWidget {
 
 class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
   final TextEditingController _text = TextEditingController();
-  String? _translation;
   bool _busy = false;
 
   @override
@@ -30,7 +29,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
     try {
       final AiRepository ai = ref.read(aiRepositoryProvider);
       final String translation = await ai.translate(text);
-      if (mounted) setState(() => _translation = translation);
+      ref.read(lastAiResultsProvider.notifier).setTranslation(text, translation);
     } on Exception catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
@@ -42,6 +41,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final String? translation = ref.watch(lastAiResultsProvider).translation;
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
       children: <Widget>[
@@ -73,14 +73,14 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
           padding: EdgeInsets.only(top: 20),
           child: LinearProgressIndicator(),
         ),
-        if (_translation != null) ...<Widget>[
+        if (translation != null) ...<Widget>[
           const SizedBox(height: 24),
           Text('Bản dịch', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: SelectableText(_translation!),
+              child: SelectableText(translation),
             ),
           ),
         ],

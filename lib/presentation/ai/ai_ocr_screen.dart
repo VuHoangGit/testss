@@ -18,9 +18,6 @@ class AiOcrScreen extends ConsumerStatefulWidget {
 }
 
 class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
-  String? _documentId;
-  String? _ocrText;
-  Map<String, String> _keyValues = const <String, String>{};
   bool _busy = false;
 
   Future<void> _run(Future<void> Function() action) async {
@@ -41,6 +38,8 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
             const <DocumentItem>[];
+    final String? documentId = ref.watch(aiDocumentIdProvider);
+    final LastAiResults last = ref.watch(lastAiResultsProvider);
     final AiRepository ai = ref.read(aiRepositoryProvider);
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
@@ -53,8 +52,11 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
         const SizedBox(height: 24),
         AiDocumentPicker(
           documents: documents,
-          value: _documentId,
-          onChanged: _busy ? null : (String? value) => setState(() => _documentId = value),
+          value: documentId,
+          onChanged: _busy
+              ? null
+              : (String? value) =>
+                  ref.read(aiDocumentIdProvider.notifier).select(value),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -62,23 +64,22 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
           runSpacing: 10,
           children: <Widget>[
             FilledButton.icon(
-              onPressed: _busy || _documentId == null
+              onPressed: _busy || documentId == null
                   ? null
                   : () => _run(() async {
-                      final OcrResult result = await ai.ocr(_documentId!);
-                      setState(() {
-                        _ocrText = result.text;
-                        _keyValues = result.keyValues;
-                      });
+                      final OcrResult result = await ai.ocr(documentId);
+                      ref
+                          .read(lastAiResultsProvider.notifier)
+                          .setOcr(result.text, result.keyValues);
                     }),
               icon: const Icon(Icons.auto_awesome),
               label: const Text('Chạy OCR'),
             ),
             OutlinedButton.icon(
-              onPressed: _busy || _documentId == null
+              onPressed: _busy || documentId == null
                   ? null
                   : () => _run(() async {
-                      final Uint8List bytes = await ai.ocrWord(_documentId!);
+                      final Uint8List bytes = await ai.ocrWord(documentId);
                       await const FileSaver().saveBytes(
                         fileName: 'ocr-result.docx',
                         bytes: bytes,
@@ -95,24 +96,24 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
           padding: EdgeInsets.only(top: 20),
           child: LinearProgressIndicator(),
         ),
-        if (_keyValues.isNotEmpty) ...<Widget>[
+        if (last.ocrKeyValues.isNotEmpty) ...<Widget>[
           const SizedBox(height: 24),
           Text('Thông tin trích xuất', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: <Widget>[
-                for (final MapEntry<String, String> entry in _keyValues.entries)
+                for (final MapEntry<String, String> entry in last.ocrKeyValues.entries)
                   ListTile(title: Text(entry.key), subtitle: Text(entry.value)),
               ],
             ),
           ),
         ],
-        if (_ocrText != null) ...<Widget>[
+        if (last.ocrText != null) ...<Widget>[
           const SizedBox(height: 16),
           Text('Nội dung OCR', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Card(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(_ocrText!))),
+          Card(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(last.ocrText!))),
         ],
       ],
     );

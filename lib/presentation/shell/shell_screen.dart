@@ -9,6 +9,7 @@ import '../documents/documents_screen.dart';
 import '../ai/ai_screen.dart';
 import 'account_tab.dart';
 import 'dashboard_tab.dart';
+import 'shell_providers.dart';
 
 class ShellScreen extends ConsumerStatefulWidget {
   const ShellScreen({super.key, required this.session});
@@ -20,10 +21,11 @@ class ShellScreen extends ConsumerStatefulWidget {
 }
 
 class _ShellScreenState extends ConsumerState<ShellScreen> {
-  int _index = 0;
-
   @override
   Widget build(BuildContext context) {
+    final int index = ref.watch(shellTabProvider);
+    final ShellTabController tabController =
+        ref.read(shellTabProvider.notifier);
     final bool wide = MediaQuery.sizeOf(context).width >= 900;
     final List<Widget> tabs = <Widget>[
       DashboardTab(user: widget.session.user),
@@ -41,7 +43,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          '${destinations[_index].$1} · DocuVault',
+          '${destinations[index].$1} · DocuVault',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
@@ -49,8 +51,8 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
         children: <Widget>[
           if (wide)
             NavigationRail(
-              selectedIndex: _index,
-              onDestinationSelected: (int i) => setState(() => _index = i),
+              selectedIndex: index,
+              onDestinationSelected: tabController.setTab,
               labelType: NavigationRailLabelType.all,
               destinations: <NavigationRailDestination>[
                 for (final (String, IconData) d in destinations)
@@ -61,15 +63,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               ],
             ),
           Expanded(
-            child: IndexedStack(index: _index, children: tabs),
+            child: IndexedStack(index: index, children: tabs),
           ),
         ],
       ),
       bottomNavigationBar: wide
           ? null
           : NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (int i) => setState(() => _index = i),
+              selectedIndex: index,
+              onDestinationSelected: tabController.setTab,
               destinations: <Widget>[
                 for (final (String, IconData) d in destinations)
                   NavigationDestination(icon: Icon(d.$2), label: d.$1),

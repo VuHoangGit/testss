@@ -6,12 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/document_entities.dart';
-import '../../domain/repositories/ai_repository.dart';
-import '../../domain/repositories/documents_repository.dart';
-import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
-import 'pdf_viewer_screen.dart';
+import 'viewer_opener.dart';
 
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key});
@@ -170,23 +167,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       _showSnack('Chỉ hỗ trợ xem trước file PDF');
       return;
     }
-    await _guard(() async {
-      final DocumentsRepository repository = ref.read(
-        documentsRepositoryProvider,
-      );
-      final AiRepository ai = ref.read(aiRepositoryProvider);
-      final bytes = await repository.downloadDocument(doc.id);
-      if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => PdfViewerScreen(
-            fileName: doc.name,
-            bytes: bytes,
-            onTranslateSelection: (String text) => ai.translate(text),
-          ),
-        ),
-      );
-    });
+    await _guard(() => openPdfViewer(ref, doc));
   }
 
   Future<void> _deleteDocument(DocumentItem doc) async {

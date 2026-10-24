@@ -3,20 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'ai_chat_screen.dart';
 import 'ai_ocr_screen.dart';
+import 'ai_providers.dart';
 import 'ai_translate_screen.dart';
 
-class AiScreen extends ConsumerStatefulWidget {
+class AiScreen extends ConsumerWidget {
   const AiScreen({super.key});
 
   @override
-  ConsumerState<AiScreen> createState() => _AiScreenState();
-}
-
-class _AiScreenState extends ConsumerState<AiScreen> {
-  int _index = 1;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final int index = ref.watch(aiToolProvider);
     const List<(String, String, IconData)> tools = <(String, String, IconData)>[
       ('OCR & Word', 'Quét tài liệu và xuất Word', Icons.document_scanner_outlined),
       ('Chat với AI', 'Hỏi đáp theo tài liệu', Icons.forum_outlined),
@@ -55,9 +50,9 @@ class _AiScreenState extends ConsumerState<AiScreen> {
             scrollDirection: Axis.horizontal,
             itemCount: tools.length,
             separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (BuildContext context, int index) {
-              final (String title, String subtitle, IconData icon) = tools[index];
-              final bool selected = _index == index;
+            itemBuilder: (BuildContext context, int i) {
+              final (String title, String subtitle, IconData icon) = tools[i];
+              final bool selected = index == i;
               return SizedBox(
                 width: 230,
                 child: Card(
@@ -67,7 +62,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
                       : Theme.of(context).colorScheme.surfaceContainerHighest,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    onTap: () => setState(() => _index = index),
+                    onTap: () => ref.read(aiToolProvider.notifier).setTool(i),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
@@ -98,7 +93,7 @@ class _AiScreenState extends ConsumerState<AiScreen> {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: IndexedStack(index: _index, children: pages),
+          child: IndexedStack(index: index, children: pages),
         ),
       ],
     );
