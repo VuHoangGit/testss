@@ -1,7 +1,8 @@
 # DocuVault — quản lý tài liệu + AI (Flutter + FastAPI)
 
 Ứng dụng đa nền tảng (web/desktop/mobile) kiểu "Google Drive + AI": kho tài liệu,
-công cụ PDF, OCR, so sánh hợp đồng, chatbot RAG. Hiện hoàn thành **Sprint 1 (đăng nhập) + Sprint 2 (kho tài liệu & công cụ PDF)**.
+công cụ PDF, OCR, so sánh hợp đồng, chatbot RAG. Hiện hoàn thành **Sprint 1 (hạ tầng,
+đăng nhập, kho tài liệu, viewer và công cụ PDF)**.
 
 ## Yêu cầu máy
 
@@ -48,6 +49,7 @@ flutter run -d edge
 - Đăng nhập: điền **`hoang@gmail.com`** / **`123456`** → bấm **"Đăng nhập"**.
   (hoặc bấm "Chưa có tài khoản? Đăng ký" để tạo tài khoản mới; sai email/mật khẩu sẽ bị từ chối 401)
 - Tab **Tài liệu**: "Tải lên" (chọn file, xem tiến độ), "Thư mục mới", chip thư mục để lọc,
+  bấm vào PDF để mở viewer,
   menu ⋮ mỗi file: **Tải xuống / Tách trang / Đặt mật khẩu / Gỡ mật khẩu / Xóa**,
   nút **"Chọn để gộp"**: tích ≥2 PDF → đặt tên → gộp thành file mới (bản gốc giữ nguyên).
 
@@ -115,3 +117,25 @@ nhanh không mật khẩu) đã **tắt** qua `ALLOW_DEV_LOGIN=false` trong `bac
 | `CORS_ORIGINS` | Origin web được gọi API | rỗng |
 | `DOCUMENTS_DIR` | Thư mục lưu file upload | `backend/storage/documents` |
 | `MAX_UPLOAD_MB` | Giới hạn 1 file | 50 |
+| `GEMINI_API_KEY` | API key Gemini, chỉ đặt ở backend | rỗng |
+| `GEMINI_MODEL` | Model cho OCR/chat/dịch | `gemini-2.5-flash` |
+| `GEMINI_TIMEOUT_SECONDS` | Timeout gọi Gemini | 60 |
+
+### AI OCR, Key-Value, dịch và chatbot
+
+Sau khi tạo API key mới, chỉ đặt key trong `backend/.env` hoặc biến môi trường
+server (`GEMINI_API_KEY=...`), tuyệt đối không đưa vào Flutter, Git hoặc tin nhắn.
+PowerShell local:
+
+```powershell
+cd C:\Users\hoang\Downloads\testss\backend
+(Get-Content .env) -replace '^GEMINI_API_KEY=.*$', 'GEMINI_API_KEY=<KEY_MOI_CUA_BAN>' |
+  Set-Content .env
+```
+
+Khởi động lại backend sau khi đổi `.env`; mở `/health` và kiểm tra
+`"ai_configured": true`.
+Tab **AI** cho phép chọn PDF trong kho để OCR/trích Key-Value, xuất `.docx`, hỏi đáp
+theo tài liệu và dịch vùng text được bôi chọn trong viewer. Các endpoint `/api/v1/ai/*` luôn kiểm tra tài liệu
+thuộc user hiện tại; khi chưa cấu hình key, backend trả lỗi cấu hình rõ ràng thay vì
+giả lập kết quả.
