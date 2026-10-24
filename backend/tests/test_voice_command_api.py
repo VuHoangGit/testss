@@ -76,7 +76,7 @@ def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_identit
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: (_ for _ in ()).throw(
-            VoiceCommandError("AI chưa được cấu hình GEMINI_API_KEY trên backend")
+            VoiceCommandError("AI chưa được cấu hình ANTHROPIC_AUTH_TOKEN trên backend")
         ),
     )
     response = client.post(
@@ -85,7 +85,7 @@ def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_identit
         json=_body(),
     )
     assert response.status_code == 503
-    assert "GEMINI_API_KEY" in response.json()["detail"]
+    assert "ANTHROPIC_AUTH_TOKEN" in response.json()["detail"]
 
 
 def test_voice_command_rejects_empty_transcript(client, monkeypatch, make_identity):
@@ -99,29 +99,25 @@ def test_voice_command_rejects_empty_transcript(client, monkeypatch, make_identi
 
 
 # ---------------------------------------------------------------------------
-# Service: parse kết quả Gemini
+# Service: parse kết quả từ API Anthropic Messages
 
 
-def _function_call(name, args=None):
-    return {
-        "candidates": [
-            {"content": {"parts": [{"functionCall": {"name": name, "args": args or {}}}]}}
-        ]
-    }
+def _tool_use(name, args=None):
+    return {"content": [{"type": "tool_use", "name": name, "input": args or {}}]}
 
 
 def _text_reply(text):
-    return {"candidates": [{"content": {"parts": [{"text": text}]}}]}
+    return {"content": [{"type": "text", "text": text}]}
 
 
-def test_interpret_returns_action_from_function_call(monkeypatch):
+def test_interpret_returns_action_from_tool_use(monkeypatch):
     captured = {}
 
     def fake_post(payload):
         captured["payload"] = payload
-        return _function_call("navigate_tab", {"tab": "documents"})
+        return _tool_use("navigate_tab", {"tab": "documents"})
 
-    monkeypatch.setattr(voice_command_service.ai_service, "post_gemini", fake_post)
+    monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     decision = voice_command_service.interpret(
         transcript="vào tab tài liệu",
         context=VoiceAppContext(current_tab="ai"),
@@ -135,7 +131,7 @@ def test_interpret_returns_action_from_function_call(monkeypatch):
 def test_interpret_text_reply_gives_no_action(monkeypatch):
     monkeypatch.setattr(
         voice_command_service.ai_service,
-        "post_gemini",
+        "post_anthropic",
         lambda payload: _text_reply("Bạn muốn mở file nào?"),
     )
     decision = voice_command_service.interpret(
@@ -151,8 +147,8 @@ def test_interpret_text_reply_gives_no_action(monkeypatch):
 def test_interpret_rejects_unknown_tool(monkeypatch):
     monkeypatch.setattr(
         voice_command_service.ai_service,
-        "post_gemini",
-        lambda payload: _function_call("open_youtube", {"url": "x"}),
+        "post_anthropic",
+        lambda payload: _tool_use("open_youtube", {"url": "x"}),
     )
     decision = voice_command_service.interpret(
         transcript="mở youtube",
@@ -166,8 +162,8 @@ def test_interpret_rejects_unknown_tool(monkeypatch):
 def test_interpret_rejects_invalid_enum_value(monkeypatch):
     monkeypatch.setattr(
         voice_command_service.ai_service,
-        "post_gemini",
-        lambda payload: _function_call("navigate_tab", {"tab": "youtube"}),
+        "post_anthropic",
+        lambda payload: _tool_use("navigate_tab", {"tab": "youtube"}),
     )
     decision = voice_command_service.interpret(
         transcript="mở youtube",
@@ -180,8 +176,8 @@ def test_interpret_rejects_invalid_enum_value(monkeypatch):
 def test_interpret_rejects_missing_required_param(monkeypatch):
     monkeypatch.setattr(
         voice_command_service.ai_service,
-        "post_gemini",
-        lambda payload: _function_call("run_ocr", {}),
+        "post_anthropic",
+        lambda payload: _tool_use("run_ocr", {}),
     )
     decision = voice_command_service.interpret(
         transcript="quét ocr",
@@ -196,7 +192,7 @@ def test_interpret_maps_ai_service_error(monkeypatch):
     def boom(payload):
         raise ai_service.AIServiceError("Không kết nối được dịch vụ AI")
 
-    monkeypatch.setattr(voice_command_service.ai_service, "post_gemini", boom)
+    monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", boom)
     with pytest.raises(VoiceCommandError):
         voice_command_service.interpret(
             transcript="hello",
@@ -212,7 +208,7 @@ def test_interpret_prompt_contains_names_but_not_ids(monkeypatch):
         captured["payload"] = payload
         return _text_reply("ok")
 
-    monkeypatch.setattr(voice_command_service.ai_service, "post_gemini", fake_post)
+    monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     context = VoiceAppContext(
         current_tab="documents",
         folders=[VoiceFolder(id="f1", name="Hợp đồng")],
@@ -223,7 +219,7 @@ def test_interpret_prompt_contains_names_but_not_ids(monkeypatch):
         ],
     )
     voice_command_service.interpret(transcript="mở file hợp đồng", context=context, session_id="s7")
-    prompt = captured["payload"]["contents"][-1]["parts"][0]["text"]
+    prompt = captured["payload"]["messages"][-1]["content"]
     assert "hop-dong-2024.pdf" in prompt
     assert "d1" not in prompt
 
@@ -239,17 +235,17 @@ def test_history_is_sent_and_capped(monkeypatch):
         captured["payload"] = payload
         return _text_reply("ok")
 
-    monkeypatch.setattr(voice_command_service.ai_service, "post_gemini", fake_post)
+    monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     for i in range(12):
         voice_command_service.interpret(
             transcript=f"lệnh số {i}",
             context=VoiceAppContext(),
             session_id="hist",
         )
-    contents = captured["payload"]["contents"]
-    user_turns = [c for c in contents if c["role"] == "user"]
-    assert any("lệnh số 11" in c["parts"][0]["text"] for c in user_turns)
-    assert all("lệnh số 0\n" not in c["parts"][0]["text"] + "\n" for c in user_turns)
+    messages = captured["payload"]["messages"]
+    user_turns = [c for c in messages if c["role"] == "user"]
+    assert any("lệnh số 11" in c["content"] for c in user_turns)
+    assert all("lệnh số 0\n" not in c["content"] + "\n" for c in user_turns)
     # +1 vì lượt hiện tại nằm ngoài history đã trim
     assert len(user_turns) <= voice_command_service.MAX_HISTORY_TURNS + 1
 
@@ -261,12 +257,12 @@ def test_history_is_isolated_between_sessions(monkeypatch):
         captured["payload"] = payload
         return _text_reply("ok")
 
-    monkeypatch.setattr(voice_command_service.ai_service, "post_gemini", fake_post)
+    monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     voice_command_service.interpret(
         transcript="của session A", context=VoiceAppContext(), session_id="a"
     )
     voice_command_service.interpret(
         transcript="của session B", context=VoiceAppContext(), session_id="b"
     )
-    texts = [c["parts"][0]["text"] for c in captured["payload"]["contents"]]
+    texts = [c["content"] for c in captured["payload"]["messages"]]
     assert not any("session A" in t for t in texts)

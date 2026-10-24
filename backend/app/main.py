@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
             "status": "ok",
             "app": s.app_name,
             "dev_login": s.allow_dev_login,
-            "ai_configured": bool(s.gemini_api_key.strip()),
+            "ai_configured": bool(s.anthropic_auth_token.strip()),
         }
 
     return app

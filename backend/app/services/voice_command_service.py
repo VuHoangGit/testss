@@ -1,14 +1,15 @@
-"""Chọn action từ lệnh giọng nói bằng Gemini function calling (REST thuần).
+"""Chọn action từ lệnh giọng nói bằng tool use của API Anthropic Messages (REST thuần).
 
 Nguyên tắc:
 - Backend KHÔNG thực thi action — chỉ trả về tên action + tham số là TÊN
   (tài liệu/thư mục). Client tự resolve tên → id trong danh sách nó gửi lên,
-  nên Gemini không bao giờ cần (hay bịa được) id.
+  nên AI không bao giờ cần (hay bịa được) id.
 - Chỉ chấp nhận action nằm trong whitelist `_ACTIONS`; tham số được validate
   kiểu/enum trước khi trả client. Action không hợp lệ → trả action=None kèm
   reply giải thích (client hiển thị, không thực thi gì).
 """
 
+from app.core.config import get_settings
 from app.schemas.voice import VoiceAppContext, VoiceCommandResponse, VoiceDocument
 from app.services import ai_service
 
@@ -27,7 +28,7 @@ _AI_TOOLS = ("ocr", "chat", "translate")
 _AI_TOOL_LABELS = {"ocr": "OCR", "chat": "Chat với AI", "translate": "Dịch văn bản"}
 _READ_TARGETS = ("ocr_result", "chat_answer", "translation", "reply")
 
-# Registry action: nguồn duy nhất cho (1) khai báo tool gửi Gemini và
+# Registry action: nguồn duy nhất cho (1) khai báo tool gửi AI và
 # (2) validate tham số trả về. Kiểu tham số: "string" | "array".
 _ACTIONS: dict[str, dict[str, object]] = {
     "navigate_tab": {
@@ -133,36 +134,33 @@ class VoiceCommandError(Exception):
     """Không gọi được dịch vụ AI để phân tích lệnh."""
 
 
-def _gemini_type(py_type: str) -> str:
-    return {"string": "STRING", "array": "ARRAY"}.get(py_type, "STRING")
-
-
-def _declarations() -> list[dict[str, object]]:
-    declarations: list[dict[str, object]] = []
+def _tools() -> list[dict[str, object]]:
+    """Khai báo tool theo schema Anthropic Messages (JSON Schema thường)."""
+    tools: list[dict[str, object]] = []
     for name, spec in _ACTIONS.items():
         params = spec["params"]
         assert isinstance(params, dict)
         properties: dict[str, object] = {}
         for param_name, param_spec in params.items():
             assert isinstance(param_spec, dict)
-            prop: dict[str, object] = {"type": _gemini_type(param_spec["type"])}
+            prop: dict[str, object] = {"type": param_spec["type"]}
             if "enum" in param_spec:
                 prop["enum"] = param_spec["enum"]
             if param_name in spec["required"]:  # type: ignore[operator]
                 prop["description"] = "Bắt buộc."
             properties[param_name] = prop
-        declarations.append(
+        tools.append(
             {
                 "name": name,
                 "description": spec["description"],
-                "parameters": {
-                    "type": "OBJECT",
+                "input_schema": {
+                    "type": "object",
                     "properties": properties,
                     "required": list(spec["required"]),  # type: ignore[arg-type]
                 },
             }
         )
-    return declarations
+    return tools
 
 
 def _describe_documents(documents: list[VoiceDocument]) -> str:
@@ -232,39 +230,41 @@ def _format_reply(action: str, params: dict) -> str:
 
 def _remember(session_id: str, transcript: str, reply: str) -> None:
     history = _HISTORY.setdefault(session_id, [])
-    history.append({"role": "user", "parts": [{"text": transcript}]})
-    history.append({"role": "model", "parts": [{"text": reply}]})
+    history.append({"role": "user", "content": transcript})
+    history.append({"role": "assistant", "content": reply})
     del history[: max(0, len(history) - MAX_HISTORY_TURNS * 2)]
 
 
 def interpret(transcript: str, context: VoiceAppContext, session_id: str) -> VoiceCommandResponse:
-    """Gửi lệnh nói tới Gemini, trả về action đã validate + câu trả lời."""
+    """Gửi lệnh nói tới AI, trả về action đã validate + câu trả lời."""
     payload: dict[str, object] = {
-        "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
-        "tools": [{"function_declarations": _declarations()}],
-        "contents": [
+        "model": get_settings().anthropic_model,
+        "max_tokens": 2048,
+        "system": _SYSTEM_PROMPT,
+        "tools": _tools(),
+        "messages": [
             *_HISTORY.get(session_id, []),
-            {"role": "user", "parts": [{"text": _build_prompt(transcript, context)}]},
+            {"role": "user", "content": _build_prompt(transcript, context)},
         ],
     }
     try:
-        response = ai_service.post_gemini(payload)
+        response = ai_service.post_anthropic(payload)
     except ai_service.AIServiceError as exc:
         raise VoiceCommandError(str(exc)) from exc
 
     text_reply = ""
     function_call: dict | None = None
     try:
-        parts = response["candidates"][0]["content"]["parts"]
-    except (KeyError, IndexError, TypeError) as exc:
+        blocks = response["content"]
+    except (KeyError, TypeError) as exc:
         raise VoiceCommandError("Dịch vụ AI không trả về nội dung") from exc
-    for part in parts:
-        if not isinstance(part, dict):
+    for block in blocks:
+        if not isinstance(block, dict):
             continue
-        if "functionCall" in part and function_call is None:
-            function_call = part["functionCall"]
-        elif "text" in part and not text_reply:
-            text_reply = str(part["text"])
+        if block.get("type") == "tool_use" and function_call is None:
+            function_call = {"name": block.get("name"), "args": block.get("input") or {}}
+        elif block.get("type") == "text" and not text_reply:
+            text_reply = str(block["text"])
     if not text_reply and function_call is None:
         raise VoiceCommandError("Dịch vụ AI không trả về nội dung")
 

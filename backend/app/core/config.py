@@ -37,9 +37,12 @@ class Settings(BaseSettings):
     documents_dir: str = ""
     # Giới hạn dung lượng 1 file upload (MB)
     max_upload_mb: int = 50
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_timeout_seconds: int = 60
+    # AI qua API tương thích Anthropic Messages (vd GLM của z.ai).
+    # Đổi model chỉ cần sửa ANTHROPIC_MODEL trong .env, không sửa code.
+    anthropic_auth_token: str = ""
+    anthropic_base_url: str = "https://api.z.ai/api/anthropic"
+    anthropic_model: str = "glm-4.6"
+    anthropic_timeout_seconds: int = 90
 
     @property
     def google_client_id_list(self) -> list[str]:
