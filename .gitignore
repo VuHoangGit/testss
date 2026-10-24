@@ -63,3 +63,9 @@ backend/storage/
 # DB SQLite demo (chứa dữ liệu local, không commit)
 backend/*.db
 backend/*.db-journal
+
+# File upload local (chạy backend từ gốc repo)
+/storage/
+
+# Artifact tạm của Playwright MCP
+/.playwright-mcp/
