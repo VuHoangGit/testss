@@ -20,7 +20,12 @@ class AIServiceError(Exception):
     """A configured AI operation could not be completed."""
 
 
-def _request_gemini(parts: list[dict[str, object]]) -> str:
+def post_gemini(payload: dict[str, object]) -> dict[str, object]:
+    """POST payload tuỳ ý tới Gemini generateContent, trả về JSON đầy đủ.
+
+    Dùng chung cho các tác vụ chỉ cần text (qua _request_gemini) và tác vụ
+    cần function calling (voice command) — cùng một chỗ xử lý lỗi/timeout.
+    """
     settings = get_settings()
     if not settings.gemini_api_key:
         raise AIServiceError("AI chưa được cấu hình GEMINI_API_KEY trên backend")
@@ -32,11 +37,11 @@ def _request_gemini(parts: list[dict[str, object]]) -> str:
         response = requests.post(
             url,
             params={"key": settings.gemini_api_key},
-            json={"contents": [{"parts": parts}]},
+            json=payload,
             timeout=settings.gemini_timeout_seconds,
         )
         response.raise_for_status()
-        payload = response.json()
+        return response.json()
     except requests.RequestException as exc:
         status = getattr(exc.response, "status_code", None)
         if status in (401, 403):
@@ -48,6 +53,10 @@ def _request_gemini(parts: list[dict[str, object]]) -> str:
         raise AIServiceError("Không kết nối được dịch vụ AI") from exc
     except ValueError as exc:
         raise AIServiceError("Dịch vụ AI trả về dữ liệu không hợp lệ") from exc
+
+
+def _request_gemini(parts: list[dict[str, object]]) -> str:
+    payload = post_gemini({"contents": [{"parts": parts}]})
     try:
         return str(payload["candidates"][0]["content"]["parts"][0]["text"])
     except (KeyError, IndexError, TypeError) as exc:

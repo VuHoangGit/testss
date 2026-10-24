@@ -8,7 +8,8 @@ from fastapi.responses import Response
 from app.api.deps import CurrentUser, DbSession
 from app.models.document import Document
 from app.schemas.ai import ChatRequest, ChatResult, OCRResult, TranslationRequest, TranslationResult
-from app.services import ai_service, storage_service
+from app.schemas.voice import VoiceCommandRequest, VoiceCommandResponse
+from app.services import ai_service, storage_service, voice_command_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -83,4 +84,15 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
         answer = ai_service.answer_question("\n\n".join(context_parts), body.question)
         return ChatResult(answer=answer)
     except ai_service.AIServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/voice-command", response_model=VoiceCommandResponse)
+def voice_command(body: VoiceCommandRequest, current: CurrentUser) -> VoiceCommandResponse:
+    """Phân tích lệnh giọng nói thành action; việc thực thi nằm ở client."""
+    try:
+        return voice_command_service.interpret(
+            transcript=body.transcript, context=body.context, session_id=body.session_id
+        )
+    except voice_command_service.VoiceCommandError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
