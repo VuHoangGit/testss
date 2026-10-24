@@ -46,7 +46,11 @@ class AuthRepositoryImpl implements AuthRepository {
     try {
       await dio.post<dynamic>(
         '/auth/register',
-        data: <String, dynamic>{'email': email, 'password': password, 'name': name},
+        data: <String, dynamic>{
+          'email': email,
+          'password': password,
+          'name': name,
+        },
       );
     } on DioException catch (e) {
       // 409 → detail "Email đã được đăng ký" từ server (mapDioException xử lý)
@@ -55,7 +59,10 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<AuthSession> login({required String email, required String password}) async {
+  Future<AuthSession> login({
+    required String email,
+    required String password,
+  }) async {
     try {
       final Response<dynamic> res = await dio.post<dynamic>(
         '/auth/login',
@@ -100,7 +107,13 @@ class AuthRepositoryImpl implements AuthRepository {
         '/auth/refresh',
         data: <String, dynamic>{'refresh_token': refresh},
       );
-      return await _persist(TokenResponseModel.fromJson(_map(res)));
+      final Map<String, dynamic> data = _map(res);
+      final String accessToken = data['access_token'] as String;
+      final String refreshToken = data['refresh_token'] as String;
+      _accessToken = accessToken;
+      _refreshToken = refreshToken;
+      await storage.save(accessToken: accessToken, refreshToken: refreshToken);
+      return _sessionFromTokens(accessToken, refreshToken);
     } on DioException catch (e) {
       throw mapDioException(e);
     }
