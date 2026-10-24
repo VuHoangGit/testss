@@ -6,8 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/document_entities.dart';
+import '../../domain/repositories/ai_repository.dart';
+import '../../domain/repositories/documents_repository.dart';
+import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
+import 'pdf_viewer_screen.dart';
 
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key});
@@ -34,7 +38,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     }
   }
 
-  Future<String?> _promptText(String title, {String hint = '', bool obscure = false}) async {
+  Future<String?> _promptText(
+    String title, {
+    String hint = '',
+    bool obscure = false,
+  }) async {
     final TextEditingController controller = TextEditingController();
     final String? result = await showDialog<String>(
       context: context,
@@ -63,7 +71,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  Future<bool> _confirm(String title, String message, {String confirmLabel = 'Xóa'}) async {
+  Future<bool> _confirm(
+    String title,
+    String message, {
+    String confirmLabel = 'Xóa',
+  }) async {
     final bool? ok = await showDialog<bool>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -88,8 +100,10 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Future<void> _upload() async {
-    final String? folderId =
-        ref.read(documentsControllerProvider).value?.selectedFolderId;
+    final String? folderId = ref
+        .read(documentsControllerProvider)
+        .value
+        ?.selectedFolderId;
     final ValueNotifier<double> progress = ValueNotifier<double>(0);
     bool dialogClosed = false;
     void closeDialog() {
@@ -113,14 +127,20 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               children: <Widget>[
                 LinearProgressIndicator(value: v <= 0 ? null : v),
                 const SizedBox(height: 8),
-                Text(v <= 0 ? 'Đang chuẩn bị…' : '${(v * 100).toStringAsFixed(0)}%'),
+                Text(
+                  v <= 0
+                      ? 'Đang chuẩn bị…'
+                      : '${(v * 100).toStringAsFixed(0)}%',
+                ),
               ],
             ),
           ),
         ),
       ),
     );
-    final DocumentsController notifier = ref.read(documentsControllerProvider.notifier);
+    final DocumentsController notifier = ref.read(
+      documentsControllerProvider.notifier,
+    );
     try {
       final String? name = await notifier.pickAndUpload(
         folderId: folderId,
@@ -137,13 +157,36 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Future<void> _download(DocumentItem doc) async {
-    await _guard(
-      () async {
-        final String? saved =
-            await ref.read(documentsControllerProvider.notifier).downloadDocument(doc);
-        if (saved != null) _showSnack('Đã lưu "${doc.name}"');
-      },
-    );
+    await _guard(() async {
+      final String? saved = await ref
+          .read(documentsControllerProvider.notifier)
+          .downloadDocument(doc);
+      if (saved != null) _showSnack('Đã lưu "${doc.name}"');
+    });
+  }
+
+  Future<void> _openViewer(DocumentItem doc) async {
+    if (!doc.isPdf) {
+      _showSnack('Chỉ hỗ trợ xem trước file PDF');
+      return;
+    }
+    await _guard(() async {
+      final DocumentsRepository repository = ref.read(
+        documentsRepositoryProvider,
+      );
+      final AiRepository ai = ref.read(aiRepositoryProvider);
+      final bytes = await repository.downloadDocument(doc.id);
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => PdfViewerScreen(
+            fileName: doc.name,
+            bytes: bytes,
+            onTranslateSelection: (String text) => ai.translate(text),
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _deleteDocument(DocumentItem doc) async {
@@ -153,7 +196,8 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     );
     if (!ok) return;
     await _guard(
-      () => ref.read(documentsControllerProvider.notifier).deleteDocument(doc.id),
+      () =>
+          ref.read(documentsControllerProvider.notifier).deleteDocument(doc.id),
       done: 'Đã xóa "${doc.name}"',
     );
   }
@@ -164,15 +208,17 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       _showSnack('Chọn ít nhất 2 file PDF để gộp');
       return;
     }
-    final String? name = await _promptText('Tên file gộp', hint: 'VD: Hop dong 2026');
-    if (name == null) return;
-    await _guard(
-      () async {
-        final String newName =
-            await ref.read(documentsControllerProvider.notifier).mergeSelected(name);
-        _showSnack('Đã tạo "$newName"');
-      },
+    final String? name = await _promptText(
+      'Tên file gộp',
+      hint: 'VD: Hop dong 2026',
     );
+    if (name == null) return;
+    await _guard(() async {
+      final String newName = await ref
+          .read(documentsControllerProvider.notifier)
+          .mergeSelected(name);
+      _showSnack('Đã tạo "$newName"');
+    });
   }
 
   Future<void> _split(DocumentItem doc) async {
@@ -180,17 +226,17 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       _showSnack('Chỉ hỗ trợ tách file PDF');
       return;
     }
-    final String? ranges =
-        await _promptText('Tách trang', hint: 'VD: 1-3,5 (phân tách bởi dấu phẩy)');
-    if (ranges == null) return;
-    await _guard(
-      () async {
-        final List<String> names = await ref
-            .read(documentsControllerProvider.notifier)
-            .splitDocument(doc.id, ranges: ranges);
-        _showSnack('Đã tạo ${names.length} file: ${names.join(', ')}');
-      },
+    final String? ranges = await _promptText(
+      'Tách trang',
+      hint: 'VD: 1-3,5 (phân tách bởi dấu phẩy)',
     );
+    if (ranges == null) return;
+    await _guard(() async {
+      final List<String> names = await ref
+          .read(documentsControllerProvider.notifier)
+          .splitDocument(doc.id, ranges: ranges);
+      _showSnack('Đã tạo ${names.length} file: ${names.join(', ')}');
+    });
   }
 
   Future<void> _protect(DocumentItem doc, {required bool removing}) async {
@@ -204,20 +250,22 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       obscure: true,
     );
     if (password == null) return;
-    await _guard(
-      () async {
-        final DocumentsController notifier = ref.read(documentsControllerProvider.notifier);
-        final String newName = removing
-            ? await notifier.unprotectDocument(doc.id, password: password)
-            : await notifier.protectDocument(doc.id, password: password);
-        _showSnack('Đã tạo "$newName"');
-      },
-    );
+    await _guard(() async {
+      final DocumentsController notifier = ref.read(
+        documentsControllerProvider.notifier,
+      );
+      final String newName = removing
+          ? await notifier.unprotectDocument(doc.id, password: password)
+          : await notifier.protectDocument(doc.id, password: password);
+      _showSnack('Đã tạo "$newName"');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<DocumentsState> async = ref.watch(documentsControllerProvider);
+    final AsyncValue<DocumentsState> async = ref.watch(
+      documentsControllerProvider,
+    );
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (Object e, StackTrace _) => Center(
@@ -226,7 +274,10 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Không tải được tài liệu: $e', textAlign: TextAlign.center),
+              child: Text(
+                'Không tải được tài liệu: $e',
+                textAlign: TextAlign.center,
+              ),
             ),
             FilledButton(
               onPressed: () => ref.invalidate(documentsControllerProvider),
@@ -263,10 +314,15 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           ),
           OutlinedButton.icon(
             onPressed: () async {
-              final String? name = await _promptText('Thư mục mới', hint: 'Tên thư mục');
+              final String? name = await _promptText(
+                'Thư mục mới',
+                hint: 'Tên thư mục',
+              );
               if (name != null) {
                 await _guard(
-                  () => ref.read(documentsControllerProvider.notifier).createFolder(name),
+                  () => ref
+                      .read(documentsControllerProvider.notifier)
+                      .createFolder(name),
                   done: 'Đã tạo thư mục "$name"',
                 );
               }
@@ -281,14 +337,16 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               label: Text('Gộp (${data.selection.length})'),
             ),
             TextButton(
-              onPressed: () =>
-                  ref.read(documentsControllerProvider.notifier).cancelSelection(),
+              onPressed: () => ref
+                  .read(documentsControllerProvider.notifier)
+                  .cancelSelection(),
               child: const Text('Hủy chọn'),
             ),
           ] else
             OutlinedButton.icon(
-              onPressed: () =>
-                  ref.read(documentsControllerProvider.notifier).enterSelectionMode(),
+              onPressed: () => ref
+                  .read(documentsControllerProvider.notifier)
+                  .enterSelectionMode(),
               icon: const Icon(Icons.checklist),
               label: const Text('Chọn để gộp'),
             ),
@@ -298,7 +356,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Widget _buildFolderChips(BuildContext context, DocumentsState data) {
-    final DocumentsController notifier = ref.read(documentsControllerProvider.notifier);
+    final DocumentsController notifier = ref.read(
+      documentsControllerProvider.notifier,
+    );
     final List<Widget> chips = <Widget>[
       Padding(
         padding: const EdgeInsets.only(left: 12),
@@ -342,7 +402,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         child: Text('Chưa có tài liệu — bấm "Tải lên" để thêm file đầu tiên'),
       );
     }
-    final DocumentsController notifier = ref.read(documentsControllerProvider.notifier);
+    final DocumentsController notifier = ref.read(
+      documentsControllerProvider.notifier,
+    );
     return RefreshIndicator(
       onRefresh: () => notifier.selectFolder(data.selectedFolderId),
       child: ListView.separated(
@@ -360,6 +422,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             onProtect: () => _protect(doc, removing: false),
             onUnprotect: () => _protect(doc, removing: true),
             onDelete: () => _deleteDocument(doc),
+            onOpenViewer: () => _openViewer(doc),
           );
         },
       ),
@@ -378,6 +441,7 @@ class _DocumentTile extends StatelessWidget {
     required this.onProtect,
     required this.onUnprotect,
     required this.onDelete,
+    required this.onOpenViewer,
   });
 
   final DocumentItem doc;
@@ -389,6 +453,7 @@ class _DocumentTile extends StatelessWidget {
   final VoidCallback onProtect;
   final VoidCallback onUnprotect;
   final VoidCallback onDelete;
+  final VoidCallback onOpenViewer;
 
   IconData get _icon {
     if (doc.isPdf) return Icons.picture_as_pdf;
@@ -398,8 +463,9 @@ class _DocumentTile extends StatelessWidget {
 
   String get _meta {
     final double mb = doc.sizeBytes / (1024 * 1024);
-    final String size =
-        mb >= 1 ? '${mb.toStringAsFixed(1)} MB' : '${(doc.sizeBytes / 1024).toStringAsFixed(0)} KB';
+    final String size = mb >= 1
+        ? '${mb.toStringAsFixed(1)} MB'
+        : '${(doc.sizeBytes / 1024).toStringAsFixed(0)} KB';
     return doc.pageCount != null ? '${doc.pageCount} trang · $size' : size;
   }
 
@@ -427,15 +493,27 @@ class _DocumentTile extends StatelessWidget {
                 }
               },
               itemBuilder: (BuildContext ctx) => const <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(value: 'download', child: Text('Tải xuống')),
-                PopupMenuItem<String>(value: 'split', child: Text('Tách trang…')),
-                PopupMenuItem<String>(value: 'protect', child: Text('Đặt mật khẩu…')),
-                PopupMenuItem<String>(value: 'unprotect', child: Text('Gỡ mật khẩu…')),
+                PopupMenuItem<String>(
+                  value: 'download',
+                  child: Text('Tải xuống'),
+                ),
+                PopupMenuItem<String>(
+                  value: 'split',
+                  child: Text('Tách trang…'),
+                ),
+                PopupMenuItem<String>(
+                  value: 'protect',
+                  child: Text('Đặt mật khẩu…'),
+                ),
+                PopupMenuItem<String>(
+                  value: 'unprotect',
+                  child: Text('Gỡ mật khẩu…'),
+                ),
                 PopupMenuDivider(),
                 PopupMenuItem<String>(value: 'delete', child: Text('Xóa')),
               ],
             ),
-      onTap: selectionMode ? onToggleSelect : null,
+      onTap: selectionMode ? onToggleSelect : (doc.isPdf ? onOpenViewer : null),
     );
   }
 }
