@@ -1,5 +1,4 @@
-/// Bộ khung ứng dụng (Shell): NavigationRail trên màn rộng, NavigationBar
-/// trên màn hẹp; 3 tab Dashboard / Tài liệu / Tài khoản.
+/// Bộ khung ứng dụng: Dashboard / Tài liệu / AI / Tài khoản.
 library;
 
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/user.dart';
 import '../documents/documents_screen.dart';
+import '../ai/ai_screen.dart';
 import 'account_tab.dart';
 import 'dashboard_tab.dart';
 
@@ -28,11 +28,13 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
     final List<Widget> tabs = <Widget>[
       DashboardTab(user: widget.session.user),
       const DocumentsScreen(),
+      const AiScreen(),
       AccountTab(userEmail: widget.session.user.email),
     ];
     const List<(String, IconData)> destinations = <(String, IconData)>[
       ('Tổng quan', Icons.space_dashboard_outlined),
       ('Tài liệu', Icons.folder_outlined),
+      ('AI', Icons.auto_awesome_outlined),
       ('Tài khoản', Icons.person_outline),
     ];
 
@@ -52,10 +54,15 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               labelType: NavigationRailLabelType.all,
               destinations: <NavigationRailDestination>[
                 for (final (String, IconData) d in destinations)
-                  NavigationRailDestination(icon: Icon(d.$2), label: Text(d.$1)),
+                  NavigationRailDestination(
+                    icon: Icon(d.$2),
+                    label: Text(d.$1),
+                  ),
               ],
             ),
-          Expanded(child: IndexedStack(index: _index, children: tabs)),
+          Expanded(
+            child: IndexedStack(index: _index, children: tabs),
+          ),
         ],
       ),
       bottomNavigationBar: wide

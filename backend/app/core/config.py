@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     documents_dir: str = ""
     # Giới hạn dung lượng 1 file upload (MB)
     max_upload_mb: int = 50
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_timeout_seconds: int = 60
 
     @property
     def google_client_id_list(self) -> list[str]:

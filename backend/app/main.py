@@ -34,7 +34,12 @@ def create_app() -> FastAPI:
     def health() -> dict[str, object]:
         # Đọc lúc request để test có thể bật/tắt allow_dev_login động
         s = get_settings()
-        return {"status": "ok", "app": s.app_name, "dev_login": s.allow_dev_login}
+        return {
+            "status": "ok",
+            "app": s.app_name,
+            "dev_login": s.allow_dev_login,
+            "ai_configured": bool(s.gemini_api_key.strip()),
+        }
 
     return app
 

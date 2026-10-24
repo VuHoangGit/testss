@@ -1,0 +1,120 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/files/file_saver.dart';
+import '../../domain/entities/document_entities.dart';
+import '../../domain/repositories/ai_repository.dart';
+import '../documents/documents_providers.dart';
+import 'ai_providers.dart';
+import 'ai_widgets.dart';
+
+class AiOcrScreen extends ConsumerStatefulWidget {
+  const AiOcrScreen({super.key});
+
+  @override
+  ConsumerState<AiOcrScreen> createState() => _AiOcrScreenState();
+}
+
+class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
+  String? _documentId;
+  String? _ocrText;
+  Map<String, String> _keyValues = const <String, String>{};
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } on Exception catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<DocumentItem> documents =
+        ref.watch(documentsControllerProvider).value?.documents ??
+            const <DocumentItem>[];
+    final AiRepository ai = ref.read(aiRepositoryProvider);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      children: <Widget>[
+        const AiPageHeader(
+          title: 'OCR & Xuất Word',
+          subtitle: 'Trích xuất nội dung và các trường thông tin từ PDF.',
+          icon: Icons.document_scanner_outlined,
+        ),
+        const SizedBox(height: 24),
+        AiDocumentPicker(
+          documents: documents,
+          value: _documentId,
+          onChanged: _busy ? null : (String? value) => setState(() => _documentId = value),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: <Widget>[
+            FilledButton.icon(
+              onPressed: _busy || _documentId == null
+                  ? null
+                  : () => _run(() async {
+                      final OcrResult result = await ai.ocr(_documentId!);
+                      setState(() {
+                        _ocrText = result.text;
+                        _keyValues = result.keyValues;
+                      });
+                    }),
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('Chạy OCR'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _busy || _documentId == null
+                  ? null
+                  : () => _run(() async {
+                      final Uint8List bytes = await ai.ocrWord(_documentId!);
+                      await const FileSaver().saveBytes(
+                        fileName: 'ocr-result.docx',
+                        bytes: bytes,
+                        mimeType:
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                      );
+                    }),
+              icon: const Icon(Icons.download_outlined),
+              label: const Text('Xuất Word'),
+            ),
+          ],
+        ),
+        if (_busy) const Padding(
+          padding: EdgeInsets.only(top: 20),
+          child: LinearProgressIndicator(),
+        ),
+        if (_keyValues.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 24),
+          Text('Thông tin trích xuất', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: <Widget>[
+                for (final MapEntry<String, String> entry in _keyValues.entries)
+                  ListTile(title: Text(entry.key), subtitle: Text(entry.value)),
+              ],
+            ),
+          ),
+        ],
+        if (_ocrText != null) ...<Widget>[
+          const SizedBox(height: 16),
+          Text('Nội dung OCR', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Card(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(_ocrText!))),
+        ],
+      ],
+    );
+  }
+}
