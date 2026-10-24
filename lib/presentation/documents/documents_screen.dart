@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/document_entities.dart';
+import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
 import 'viewer_opener.dart';
@@ -167,7 +168,13 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       _showSnack('Chỉ hỗ trợ xem trước file PDF');
       return;
     }
-    await _guard(() => openPdfViewer(ref, doc));
+    await _guard(
+      () => openPdfViewer(
+        repository: ref.read(documentsRepositoryProvider),
+        aiRepository: ref.read(aiRepositoryProvider),
+        doc: doc,
+      ),
+    );
   }
 
   Future<void> _deleteDocument(DocumentItem doc) async {

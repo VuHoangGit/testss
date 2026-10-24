@@ -5,21 +5,20 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/navigation/root_navigator_key.dart';
 import '../../domain/entities/document_entities.dart';
 import '../../domain/repositories/ai_repository.dart';
 import '../../domain/repositories/documents_repository.dart';
-import '../ai/ai_providers.dart';
-import 'documents_providers.dart';
 import 'pdf_viewer_screen.dart';
 
 /// Tải bytes rồi đẩy [PdfViewerScreen]. Trả về câu phản hồi cho người gọi
 /// (voice dùng để đọc lại bằng TTS); ném Exception như các thao tác khác.
-Future<String> openPdfViewer(WidgetRef ref, DocumentItem doc) async {
-  final DocumentsRepository repository = ref.read(documentsRepositoryProvider);
-  final AiRepository ai = ref.read(aiRepositoryProvider);
+Future<String> openPdfViewer({
+  required DocumentsRepository repository,
+  required AiRepository aiRepository,
+  required DocumentItem doc,
+}) async {
   final Uint8List bytes = await repository.downloadDocument(doc.id);
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {
@@ -30,7 +29,7 @@ Future<String> openPdfViewer(WidgetRef ref, DocumentItem doc) async {
       builder: (_) => PdfViewerScreen(
         fileName: doc.name,
         bytes: bytes,
-        onTranslateSelection: (String text) => ai.translate(text),
+        onTranslateSelection: (String text) => aiRepository.translate(text),
       ),
     ),
   );

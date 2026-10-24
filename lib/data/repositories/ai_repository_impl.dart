@@ -76,4 +76,47 @@ class AiRepositoryImpl implements AiRepository {
       throw mapDioException(error, fallback: 'Không nhận được câu trả lời AI');
     }
   }
+
+  @override
+  Future<VoiceCommandResult> voiceCommand(
+    String transcript, {
+    required VoiceAppContext context,
+    required String sessionId,
+  }) async {
+    try {
+      final Response<dynamic> response = await dio.post<dynamic>(
+        '/ai/voice-command',
+        data: <String, dynamic>{
+          'transcript': transcript,
+          'session_id': sessionId,
+          'context': <String, dynamic>{
+            'current_tab': context.currentTab,
+            'folders': <Map<String, String>>[
+              for (final VoiceFolderRef folder in context.folders)
+                <String, String>{'id': folder.id, 'name': folder.name},
+            ],
+            'documents': <Map<String, String>>[
+              for (final VoiceDocumentRef document in context.documents)
+                <String, String>{
+                  'id': document.id,
+                  'name': document.name,
+                  'mime_type': document.mimeType,
+                },
+            ],
+          },
+        },
+      );
+      final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      return VoiceCommandResult(
+        action: data['action'] as String?,
+        params: (data['params'] as Map<dynamic, dynamic>?)?.map(
+              (dynamic key, dynamic value) =>
+                  MapEntry(key.toString(), value),
+            ) ?? <String, dynamic>{},
+        reply: data['reply'] as String,
+      );
+    } on DioException catch (error) {
+      throw mapDioException(error, fallback: 'Không phân tích được lệnh giọng nói');
+    }
+  }
 }

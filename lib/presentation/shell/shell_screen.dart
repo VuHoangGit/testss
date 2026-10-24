@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/entities/user.dart';
 import '../documents/documents_screen.dart';
 import '../ai/ai_screen.dart';
+import '../voice/voice_panel.dart';
 import 'account_tab.dart';
 import 'dashboard_tab.dart';
 import 'shell_providers.dart';
@@ -46,24 +47,32 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
           '${destinations[index].$1} · DocuVault',
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
+        actions: <Widget>[const VoiceMicButton()],
       ),
-      body: Row(
+      body: Column(
         children: <Widget>[
-          if (wide)
-            NavigationRail(
-              selectedIndex: index,
-              onDestinationSelected: tabController.setTab,
-              labelType: NavigationRailLabelType.all,
-              destinations: <NavigationRailDestination>[
-                for (final (String, IconData) d in destinations)
-                  NavigationRailDestination(
-                    icon: Icon(d.$2),
-                    label: Text(d.$1),
+          const VoicePanel(),
+          Expanded(
+            child: Row(
+              children: <Widget>[
+                if (wide)
+                  NavigationRail(
+                    selectedIndex: index,
+                    onDestinationSelected: tabController.setTab,
+                    labelType: NavigationRailLabelType.all,
+                    destinations: <NavigationRailDestination>[
+                      for (final (String, IconData) d in destinations)
+                        NavigationRailDestination(
+                          icon: Icon(d.$2),
+                          label: Text(d.$1),
+                        ),
+                    ],
                   ),
+                Expanded(
+                  child: IndexedStack(index: index, children: tabs),
+                ),
               ],
             ),
-          Expanded(
-            child: IndexedStack(index: index, children: tabs),
           ),
         ],
       ),

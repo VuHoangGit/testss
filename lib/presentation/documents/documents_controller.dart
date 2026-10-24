@@ -155,6 +155,18 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     state = AsyncData(current.copyWith(selectionMode: true));
   }
 
+  /// Đặt lại danh sách đang chọn (voice merge dùng) + bật selection mode.
+  void setSelection(Iterable<String> documentIds) {
+    final DocumentsState current = state.value ?? const DocumentsState();
+    final Set<String> next = documentIds.toSet();
+    state = AsyncData(
+      current.copyWith(
+        selection: next,
+        selectionMode: next.isNotEmpty || current.selectionMode,
+      ),
+    );
+  }
+
   void cancelSelection() {
     final DocumentsState current = state.value ?? const DocumentsState();
     state = AsyncData(
