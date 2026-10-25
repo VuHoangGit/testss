@@ -49,6 +49,7 @@ app.*.map.json
 
 # Task local (Claude)
 TASK.md
+TASK-auth-supabase.md
 CLAUDE.local.md
 
 # Backend (FastAPI)
