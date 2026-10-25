@@ -45,8 +45,8 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
       children: <Widget>[
         const AiPageHeader(
-          title: 'OCR & Xuất Word',
-          subtitle: 'Trích xuất nội dung và các trường thông tin từ PDF.',
+          title: 'OCR & Export to Word',
+          subtitle: 'Extract content and data fields from a PDF.',
           icon: Icons.document_scanner_outlined,
         ),
         const SizedBox(height: 24),
@@ -73,7 +73,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
                           .setOcr(result.text, result.keyValues);
                     }),
               icon: const Icon(Icons.auto_awesome),
-              label: const Text('Chạy OCR'),
+              label: const Text('Run OCR'),
             ),
             OutlinedButton.icon(
               onPressed: _busy || documentId == null
@@ -88,7 +88,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
                       );
                     }),
               icon: const Icon(Icons.download_outlined),
-              label: const Text('Xuất Word'),
+              label: const Text('Export Word'),
             ),
           ],
         ),
@@ -98,7 +98,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
         ),
         if (last.ocrKeyValues.isNotEmpty) ...<Widget>[
           const SizedBox(height: 24),
-          Text('Thông tin trích xuất', style: Theme.of(context).textTheme.titleMedium),
+          Text('Extracted fields', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(
             child: Column(
@@ -111,7 +111,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
         ],
         if (last.ocrText != null) ...<Widget>[
           const SizedBox(height: 16),
-          Text('Nội dung OCR', style: Theme.of(context).textTheme.titleMedium),
+          Text('OCR text', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           Card(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(last.ocrText!))),
         ],

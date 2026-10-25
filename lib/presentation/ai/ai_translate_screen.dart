@@ -8,17 +8,17 @@ import '../documents/documents_providers.dart';
 import 'ai_providers.dart';
 import 'ai_widgets.dart';
 
-/// Ngôn ngữ dịch: label hiển thị tiếng Việt + value gửi cho AI.
+/// Translation languages: display label and API value.
 const List<(String, String)> _kLanguages = <(String, String)>[
-  ('Tiếng Việt', 'Vietnamese'),
+  ('Vietnamese', 'Vietnamese'),
   ('English', 'English'),
-  ('中文 — Trung', 'Chinese'),
-  ('日本語 — Nhật', 'Japanese'),
-  ('한국어 — Hàn', 'Korean'),
-  ('Français — Pháp', 'French'),
-  ('Deutsch — Đức', 'German'),
-  ('Español — Tây Ban Nha', 'Spanish'),
-  ('Русский — Nga', 'Russian'),
+  ('Chinese', 'Chinese'),
+  ('Japanese', 'Japanese'),
+  ('Korean', 'Korean'),
+  ('French', 'French'),
+  ('German', 'German'),
+  ('Spanish', 'Spanish'),
+  ('Russian', 'Russian'),
 ];
 
 enum _SourceMode { document, paste }
@@ -40,7 +40,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
   String? _selection;
   String? _translation;
   bool _translating = false;
-  String _sourceValue = ''; // '' = tự phát hiện
+  String _sourceValue = ''; // Empty means automatic detection.
   String _targetValue = 'Vietnamese';
 
   @override
@@ -81,8 +81,8 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
     if (text.isEmpty) {
       _showHint(
         _mode == _SourceMode.document
-            ? 'Hãy bôi đen đoạn văn cần dịch rồi bấm Dịch'
-            : 'Nhập hoặc dán văn bản cần dịch',
+            ? 'Highlight text to translate, then press Translate'
+            : 'Enter or paste text to translate',
       );
       return;
     }
@@ -114,7 +114,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
   }
 
   void _swapLanguages() {
-    if (_sourceValue.isEmpty) return; // "Tự phát hiện" không đổi chỗ được
+    if (_sourceValue.isEmpty) return; // Automatic detection cannot be swapped.
     setState(() {
       final String previousSource = _sourceValue;
       _sourceValue = _targetValue;
@@ -126,7 +126,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
     final String? translation = _translation;
     if (translation == null) return;
     Clipboard.setData(ClipboardData(text: translation));
-    _showHint('Đã sao chép bản dịch');
+    _showHint('Translation copied');
   }
 
   @override
@@ -142,9 +142,9 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
           child: const AiPageHeader(
-            title: 'Dịch vùng chọn',
+            title: 'Translate',
             subtitle:
-                'Chọn tài liệu, bôi đen đoạn cần dịch — hoặc dán văn bản trực tiếp.',
+                'Select a document and highlight text — or paste text directly.',
             icon: Icons.translate_outlined,
           ),
         ),
@@ -160,12 +160,12 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                       ButtonSegment<_SourceMode>(
                         value: _SourceMode.document,
                         icon: Icon(Icons.folder_open_outlined),
-                        label: Text('Từ tài liệu'),
+                        label: Text('From document'),
                       ),
                       ButtonSegment<_SourceMode>(
                         value: _SourceMode.paste,
                         icon: Icon(Icons.content_paste_go_outlined),
-                        label: Text('Dán văn bản'),
+                        label: Text('Paste text'),
                       ),
                     ],
                     selected: <_SourceMode>{_mode},
@@ -186,10 +186,10 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                             value: _documentId,
                             filter: (DocumentItem document) =>
                                 document.hasTextContent,
-                            labelText: 'Tài liệu (PDF, Word, txt/md)',
+                            labelText: 'Document (PDF, Word, txt/md)',
                             prefixIcon: Icons.description_outlined,
                             emptyHint:
-                                'Chưa có tài liệu đọc được (PDF/Word/txt/md)',
+                                'No readable documents (PDF/Word/txt/md)',
                             onChanged: (String? id) => setState(() {
                               _documentId = id;
                               _content = null;
@@ -213,7 +213,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                                   ),
                                 )
                               : const Icon(Icons.visibility_outlined),
-                          label: const Text('Hiện nội dung'),
+                          label: const Text('Show content'),
                         ),
                       ],
                     )
@@ -223,8 +223,8 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                       minLines: 3,
                       maxLines: 6,
                       decoration: const InputDecoration(
-                        labelText: 'Nội dung cần dịch',
-                        hintText: 'Dán văn bản vào đây...',
+                        labelText: 'Text to translate',
+                        hintText: 'Paste text here...',
                         alignLabelWithHint: true,
                         border: OutlineInputBorder(),
                       ),
@@ -249,8 +249,8 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                 : const Icon(Icons.translate),
             label: Text(
               _mode == _SourceMode.document
-                  ? 'Dịch vùng đã chọn'
-                  : 'Dịch văn bản',
+                  ? 'Translate selection'
+                  : 'Translate text',
             ),
           ),
         ),
@@ -285,13 +285,13 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
           child: DropdownButtonFormField<String>(
             initialValue: _sourceValue,
             decoration: const InputDecoration(
-              labelText: 'Từ ngôn ngữ',
+              labelText: 'Source language',
               prefixIcon: Icon(Icons.language_outlined),
             ),
             items: <DropdownMenuItem<String>>[
               const DropdownMenuItem<String>(
                 value: '',
-                child: Text('Tự động phát hiện'),
+                child: Text('Detect automatically'),
               ),
               for (final (String label, String value) in _kLanguages)
                 DropdownMenuItem<String>(value: value, child: Text(label)),
@@ -301,7 +301,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
           ),
         ),
         IconButton(
-          tooltip: 'Đảo ngôn ngữ',
+          tooltip: 'Swap languages',
           onPressed: _sourceValue.isEmpty ? null : _swapLanguages,
           icon: const Icon(Icons.swap_horiz),
         ),
@@ -309,7 +309,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
           child: DropdownButtonFormField<String>(
             initialValue: _targetValue,
             decoration: const InputDecoration(
-              labelText: 'Sang ngôn ngữ',
+              labelText: 'Target language',
               prefixIcon: Icon(Icons.flag_outlined),
             ),
             items: <DropdownMenuItem<String>>[
@@ -338,7 +338,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Nội dung đã dán ở ô phía trên — bấm "Dịch văn bản" để dịch.',
+                'Your pasted text is shown above — click "Translate text" to continue.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Theme.of(context).hintColor),
               ),
@@ -366,7 +366,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Chọn tài liệu rồi bấm "Hiện nội dung",\nsau đó bôi đen đoạn cần dịch.',
+                'Select a document and press "Show content",\nthen highlight text to translate.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Theme.of(context).hintColor),
               ),
@@ -386,14 +386,14 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Nội dung tài liệu',
+                    'Document content',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
                 if (_selection != null && _selection!.trim().isNotEmpty)
                   Flexible(
                     child: Text(
-                      'Đã chọn ${_selection!.trim().length} ký tự',
+                      '${_selection!.trim().length} characters selected',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.primary,
                         fontSize: 12,
@@ -446,13 +446,13 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'Bản dịch',
+                    'Translation',
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
                 if (translation != null)
                   IconButton(
-                    tooltip: 'Sao chép',
+                    tooltip: 'Copy',
                     onPressed: _copyTranslation,
                     icon: const Icon(Icons.copy_outlined, size: 18),
                   ),
@@ -464,7 +464,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
             child: translation == null
                 ? Center(
                     child: Text(
-                      'Bản dịch sẽ hiện ở đây',
+                      'Your translation will appear here',
                       style: TextStyle(color: Theme.of(context).hintColor),
                     ),
                   )

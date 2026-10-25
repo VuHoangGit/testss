@@ -1,4 +1,4 @@
-/// Bộ khung ứng dụng: Dashboard / Tài liệu / AI / Tài khoản.
+/// Main application shell: Overview / Files / AI Center / Account.
 library;
 
 import 'package:flutter/material.dart';
@@ -35,19 +35,17 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       AccountTab(userEmail: widget.session.user.email),
     ];
     const List<(String, IconData)> destinations = <(String, IconData)>[
-      ('Tổng quan', Icons.space_dashboard_outlined),
-      ('Tài liệu', Icons.folder_outlined),
-      ('AI', Icons.auto_awesome_outlined),
-      ('Tài khoản', Icons.person_outline),
+      ('Overview', Icons.space_dashboard_outlined),
+      ('Files', Icons.folder_outlined),
+      ('AI Center', Icons.auto_awesome_outlined),
+      ('Account', Icons.person_outline),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          '${destinations[index].$1} · DocuVault',
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        actions: <Widget>[const VoiceMicButton()],
+        title: Text(destinations[index].$1,
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+        actions: const <Widget>[VoiceMicButton()],
       ),
       body: Column(
         children: <Widget>[

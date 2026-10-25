@@ -95,7 +95,7 @@ class ChatMessagesController extends Notifier<List<ChatMessage>> {
   List<ChatMessage> build() => <ChatMessage>[
         const ChatMessage(
           text:
-              'Xin chào! Hãy chọn một tài liệu và đặt câu hỏi, tôi sẽ trả lời dựa trên nội dung PDF đó.',
+              'Hello! Select a document and ask a question. I will answer based on its content.',
           fromUser: false,
         ),
       ];
@@ -106,7 +106,7 @@ class ChatMessagesController extends Notifier<List<ChatMessage>> {
   void clear() => state = <ChatMessage>[
         const ChatMessage(
           text:
-              'Xin chào! Hãy chọn một tài liệu và đặt câu hỏi, tôi sẽ trả lời dựa trên nội dung PDF đó.',
+              'Hello! Select a document and ask a question. I will answer based on its content.',
           fromUser: false,
         ),
       ];

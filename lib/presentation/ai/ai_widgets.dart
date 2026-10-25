@@ -9,9 +9,9 @@ class AiDocumentPicker extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.filter,
-    this.labelText = 'Tài liệu PDF',
+    this.labelText = 'PDF document',
     this.prefixIcon = Icons.picture_as_pdf_outlined,
-    this.emptyHint = 'Chưa có tài liệu nào',
+    this.emptyHint = 'No documents available',
   });
 
   final List<DocumentItem> documents;

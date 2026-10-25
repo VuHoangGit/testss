@@ -1,5 +1,4 @@
-/// Tab Tài liệu (Sprint 2): thư mục, upload, danh sách, tải xuống và
-/// công cụ PDF (gộp/tách/mật khẩu).
+/// Files tab: folders, uploads, downloads, and PDF tools.
 library;
 
 import 'package:flutter/material.dart';
@@ -56,11 +55,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Xong'),
+            child: const Text('Done'),
           ),
         ],
       ),
@@ -72,7 +71,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   Future<bool> _confirm(
     String title,
     String message, {
-    String confirmLabel = 'Xóa',
+    String confirmLabel = 'Delete',
   }) async {
     final bool? ok = await showDialog<bool>(
       context: context,
@@ -82,7 +81,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Hủy'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -117,7 +116,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       builder: (BuildContext ctx) => PopScope<void>(
         canPop: false,
         child: AlertDialog(
-          title: const Text('Đang tải lên…'),
+          title: const Text('Uploading…'),
           content: ValueListenableBuilder<double>(
             valueListenable: progress,
             builder: (_, double v, _) => Column(
@@ -127,7 +126,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                 const SizedBox(height: 8),
                 Text(
                   v <= 0
-                      ? 'Đang chuẩn bị…'
+                      ? 'Preparing…'
                       : '${(v * 100).toStringAsFixed(0)}%',
                 ),
               ],
@@ -175,62 +174,62 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   Future<void> _deleteDocument(DocumentItem doc) async {
     final bool ok = await _confirm(
-      'Xóa tài liệu?',
-      '"${doc.name}" sẽ bị xóa vĩnh viễn. Thao tác không thể hoàn tác.',
+      'Delete document?',
+      '"${doc.name}" will be permanently deleted. This cannot be undone.',
     );
     if (!ok) return;
     await _guard(
       () =>
           ref.read(documentsControllerProvider.notifier).deleteDocument(doc.id),
-      done: 'Đã xóa "${doc.name}"',
+      done: 'Deleted "${doc.name}"',
     );
   }
 
   Future<void> _mergeSelected() async {
     final DocumentsState data = ref.read(documentsControllerProvider).value!;
     if (data.selection.length < 2) {
-      _showSnack('Chọn ít nhất 2 file PDF để gộp');
+      _showSnack('Select at least 2 PDF files to merge');
       return;
     }
     final String? name = await _promptText(
-      'Tên file gộp',
-      hint: 'VD: Hop dong 2026',
+      'Merged file name',
+      hint: 'e.g. Contract 2026',
     );
     if (name == null) return;
     await _guard(() async {
       final String newName = await ref
           .read(documentsControllerProvider.notifier)
           .mergeSelected(name);
-      _showSnack('Đã tạo "$newName"');
+      _showSnack('Created "$newName"');
     });
   }
 
   Future<void> _split(DocumentItem doc) async {
     if (!doc.isPdf) {
-      _showSnack('Chỉ hỗ trợ tách file PDF');
+      _showSnack('Only PDF files can be split');
       return;
     }
     final String? ranges = await _promptText(
-      'Tách trang',
-      hint: 'VD: 1-3,5 (phân tách bởi dấu phẩy)',
+      'Split pages',
+      hint: 'e.g. 1-3,5 (separate with commas)',
     );
     if (ranges == null) return;
     await _guard(() async {
       final List<String> names = await ref
           .read(documentsControllerProvider.notifier)
           .splitDocument(doc.id, ranges: ranges);
-      _showSnack('Đã tạo ${names.length} file: ${names.join(', ')}');
+      _showSnack('Created ${names.length} files: ${names.join(', ')}');
     });
   }
 
   Future<void> _protect(DocumentItem doc, {required bool removing}) async {
     if (!doc.isPdf) {
-      _showSnack('Chỉ hỗ trợ file PDF');
+      _showSnack('Only PDF files are supported');
       return;
     }
     final String? password = await _promptText(
-      removing ? 'Gỡ mật khẩu' : 'Đặt mật khẩu',
-      hint: removing ? 'Mật khẩu hiện tại' : 'Mật khẩu mới',
+      removing ? 'Remove password' : 'Set password',
+      hint: removing ? 'Current password' : 'New password',
       obscure: true,
     );
     if (password == null) return;
@@ -241,7 +240,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       final String newName = removing
           ? await notifier.unprotectDocument(doc.id, password: password)
           : await notifier.protectDocument(doc.id, password: password);
-      _showSnack('Đã tạo "$newName"');
+      _showSnack('Created "$newName"');
     });
   }
 
@@ -259,13 +258,13 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
-                'Không tải được tài liệu: $e',
+                'Unable to load documents: $e',
                 textAlign: TextAlign.center,
               ),
             ),
             FilledButton(
               onPressed: () => ref.invalidate(documentsControllerProvider),
-              child: const Text('Thử lại'),
+              child: const Text('Try again'),
             ),
           ],
         ),
@@ -294,37 +293,37 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           FilledButton.icon(
             onPressed: _upload,
             icon: const Icon(Icons.upload_file),
-            label: const Text('Tải lên'),
+            label: const Text('Upload'),
           ),
           OutlinedButton.icon(
             onPressed: () async {
               final String? name = await _promptText(
-                'Thư mục mới',
-                hint: 'Tên thư mục',
+                'New folder',
+                hint: 'Folder name',
               );
               if (name != null) {
                 await _guard(
                   () => ref
                       .read(documentsControllerProvider.notifier)
                       .createFolder(name),
-                  done: 'Đã tạo thư mục "$name"',
+                  done: 'Created folder "$name"',
                 );
               }
             },
             icon: const Icon(Icons.create_new_folder_outlined),
-            label: const Text('Thư mục mới'),
+            label: const Text('New folder'),
           ),
           if (data.selectionMode) ...<Widget>[
             OutlinedButton.icon(
               onPressed: data.selection.length >= 2 ? _mergeSelected : null,
               icon: const Icon(Icons.merge),
-              label: Text('Gộp (${data.selection.length})'),
+              label: Text('Merge (${data.selection.length})'),
             ),
             TextButton(
               onPressed: () => ref
                   .read(documentsControllerProvider.notifier)
                   .cancelSelection(),
-              child: const Text('Hủy chọn'),
+              child: const Text('Cancel selection'),
             ),
           ] else
             OutlinedButton.icon(
@@ -332,7 +331,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                   .read(documentsControllerProvider.notifier)
                   .enterSelectionMode(),
               icon: const Icon(Icons.checklist),
-              label: const Text('Chọn để gộp'),
+              label: const Text('Select to merge'),
             ),
         ],
       ),
@@ -347,7 +346,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       Padding(
         padding: const EdgeInsets.only(left: 12),
         child: ChoiceChip(
-          label: const Text('Tất cả'),
+          label: const Text('All'),
           selected: data.selectedFolderId == null,
           onSelected: (_) => _guard(() => notifier.selectFolder(null)),
         ),
@@ -361,13 +360,13 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             onSelected: (_) => _guard(() => notifier.selectFolder(folder.id)),
             onDeleted: () async {
               final bool ok = await _confirm(
-                'Xóa thư mục?',
-                'Thư mục "${folder.name}" chỉ xóa được khi trống. Tiếp tục?',
+                'Delete folder?',
+                'Folder "${folder.name}" can only be deleted when empty. Continue?',
               );
               if (ok) {
                 await _guard(
                   () => notifier.deleteFolder(folder.id),
-                  done: 'Đã xóa thư mục "${folder.name}"',
+                  done: 'Deleted folder "${folder.name}"',
                 );
               }
             },
@@ -383,7 +382,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   Widget _buildList(BuildContext context, DocumentsState data) {
     if (data.documents.isEmpty) {
       return const Center(
-        child: Text('Chưa có tài liệu — bấm "Tải lên" để thêm file đầu tiên'),
+        child: Text('No documents yet — tap "Upload" to add your first file'),
       );
     }
     final DocumentsController notifier = ref.read(
@@ -479,22 +478,22 @@ class _DocumentTile extends StatelessWidget {
               itemBuilder: (BuildContext ctx) => const <PopupMenuEntry<String>>[
                 PopupMenuItem<String>(
                   value: 'download',
-                  child: Text('Tải xuống'),
+                  child: Text('Download'),
                 ),
                 PopupMenuItem<String>(
                   value: 'split',
-                  child: Text('Tách trang…'),
+                  child: Text('Split pages…'),
                 ),
                 PopupMenuItem<String>(
                   value: 'protect',
-                  child: Text('Đặt mật khẩu…'),
+                  child: Text('Set password…'),
                 ),
                 PopupMenuItem<String>(
                   value: 'unprotect',
-                  child: Text('Gỡ mật khẩu…'),
+                  child: Text('Remove password…'),
                 ),
                 PopupMenuDivider(),
-                PopupMenuItem<String>(value: 'delete', child: Text('Xóa')),
+                PopupMenuItem<String>(value: 'delete', child: Text('Delete')),
               ],
             ),
       onTap: selectionMode ? onToggleSelect : onOpenViewer,

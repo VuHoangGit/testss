@@ -20,28 +20,28 @@ class AccountTab extends ConsumerWidget {
           child: ListTile(
             leading: const Icon(Icons.account_circle, size: 40),
             title: Text(userEmail),
-            subtitle: const Text('Đăng nhập phiên hiện tại'),
+            subtitle: const Text('Signed in to your workspace'),
           ),
         ),
         const SizedBox(height: 12),
         Card(
           child: ListTile(
             leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
-            title: const Text('Đăng xuất'),
+            title: const Text('Sign out'),
             onTap: () async {
               final bool? ok = await showDialog<bool>(
                 context: context,
                 builder: (BuildContext ctx) => AlertDialog(
-                  title: const Text('Đăng xuất?'),
-                  content: const Text('Phiên trên thiết bị này sẽ kết thúc. Dữ liệu không bị xóa.'),
+                  title: const Text('Sign out?'),
+                  content: const Text('Your session will end on this device. Your data will not be deleted.'),
                   actions: <Widget>[
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Hủy'),
+                      child: const Text('Cancel'),
                     ),
                     FilledButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Đăng xuất'),
+                      child: const Text('Sign out'),
                     ),
                   ],
                 ),

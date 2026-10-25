@@ -7,6 +7,7 @@ import 'domain/entities/user.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/providers.dart';
 import 'presentation/shell/shell_screen.dart';
+import 'presentation/theme/theme_mode_provider.dart';
 
 Future<void> main() async {
   runApp(const ProviderScope(child: DocuVaultApp()));
@@ -21,13 +22,15 @@ class DocuVaultApp extends ConsumerWidget {
       title: 'DocuVault',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ref.watch(themeModeProvider),
       navigatorKey: rootNavigatorKey,
       home: const AuthGate(),
     );
   }
 }
 
-/// Điều hướng theo trạng thái xác thực: splash → Login hoặc Shell.
+/// Routes to Login or Shell based on authentication state.
 class AuthGate extends ConsumerWidget {
   const AuthGate({super.key});
 
@@ -42,11 +45,11 @@ class AuthGate extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text('Không khởi động được phiên: $e'),
+              Text('Unable to start session: $e'),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: () => ref.invalidate(authControllerProvider),
-                child: const Text('Thử lại'),
+                child: const Text('Try again'),
               ),
             ],
           ),

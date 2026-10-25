@@ -13,9 +13,9 @@ class AiScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final int index = ref.watch(aiToolProvider);
     const List<(String, String, IconData)> tools = <(String, String, IconData)>[
-      ('OCR & Word', 'Quét tài liệu và xuất Word', Icons.document_scanner_outlined),
-      ('Chat với AI', 'Hỏi đáp theo tài liệu', Icons.forum_outlined),
-      ('Dịch vùng chọn', 'Dịch đoạn văn nhanh chóng', Icons.translate_outlined),
+      ('OCR & Word', 'Extract text and export', Icons.document_scanner_outlined),
+      ('AI Chat', 'Ask questions about files', Icons.forum_outlined),
+      ('Translate', 'Translate selected text', Icons.translate_outlined),
     ];
     final List<Widget> pages = <Widget>[
       const AiOcrScreen(),
@@ -29,7 +29,7 @@ class AiScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
           child: Text(
-            'Trung tâm AI',
+            'AI Center',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
@@ -38,7 +38,7 @@ class AiScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'Chọn một công cụ để bắt đầu làm việc với tài liệu của bạn.',
+            'Choose a tool to start working with your documents.',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
         ),

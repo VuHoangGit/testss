@@ -1,4 +1,4 @@
-/// Màn đăng nhập / đăng ký tài khoản email + mật khẩu.
+/// Email and password sign-in / registration.
 ///
 /// Luồng Google giữ nguyên code chờ cấu hình OAuth client ID (xem README).
 library;
@@ -56,7 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _registerMode = false;
           _password.clear();
         });
-        _showSnack('Đăng ký thành công. Hãy đăng nhập.');
+        _showSnack('Account created successfully. Please sign in.');
       } else {
         await controller.signIn(email: email, password: password);
       }
@@ -97,8 +97,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 4),
                   Text(
                     _registerMode
-                        ? 'Tạo tài khoản mới'
-                        : 'Kho tài liệu thông minh của bạn',
+                        ? 'Create your account'
+                        : 'Your intelligent document workspace',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.outline,
@@ -109,13 +109,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
-                      labelText: 'Email',
+                      labelText: 'Email address',
                       prefixIcon: Icon(Icons.alternate_email),
                     ),
                     validator: (String? v) {
                       final String value = v?.trim() ?? '';
-                      if (value.isEmpty) return 'Nhập email';
-                      if (!value.contains('@')) return 'Email không hợp lệ';
+                      if (value.isEmpty) return 'Enter your email';
+                      if (!value.contains('@')) return 'Enter a valid email';
                       return null;
                     },
                   ),
@@ -124,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     TextFormField(
                       controller: _name,
                       decoration: const InputDecoration(
-                        labelText: 'Tên hiển thị (tùy chọn)',
+                        labelText: 'Display name (optional)',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                     ),
@@ -134,15 +134,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     controller: _password,
                     obscureText: true,
                     decoration: InputDecoration(
-                      labelText: 'Mật khẩu',
-                      helperText: _registerMode ? 'Tối thiểu 6 ký tự' : null,
+                      labelText: 'Password',
+                      helperText: _registerMode ? 'At least 6 characters' : null,
                       prefixIcon: const Icon(Icons.lock_outline),
                     ),
                     validator: (String? v) {
                       final String value = v ?? '';
-                      if (value.isEmpty) return 'Nhập mật khẩu';
+                      if (value.isEmpty) return 'Enter your password';
                       if (_registerMode && value.length < 6) {
-                        return 'Mật khẩu tối thiểu 6 ký tự';
+                        return 'Password must be at least 6 characters';
                       }
                       return null;
                     },
@@ -158,7 +158,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : Icon(_registerMode ? Icons.person_add : Icons.login),
-                    label: Text(_registerMode ? 'Đăng ký' : 'Đăng nhập'),
+                    label: Text(_registerMode ? 'Create account' : 'Sign in'),
                   ),
                   const SizedBox(height: 4),
                   TextButton(
@@ -170,8 +170,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             }),
                     child: Text(
                       _registerMode
-                          ? 'Đã có tài khoản? Đăng nhập'
-                          : 'Chưa có tài khoản? Đăng ký',
+                          ? 'Already have an account? Sign in'
+                          : 'New to DocuVault? Create an account',
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -179,11 +179,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: busy
                         ? null
                         : () => _showSnack(
-                              'Đăng nhập Google sẽ được bật sau khi cấu hình '
-                              'OAuth client ID (xem README).',
+                              'Google sign-in will be available after configuring '
+                              'the OAuth client ID.',
                             ),
                     icon: const Icon(Icons.g_mobiledata),
-                    label: const Text('Đăng nhập bằng Google'),
+                    label: const Text('Continue with Google'),
                   ),
                 ],
               ),

@@ -76,8 +76,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           child: Column(
             children: <Widget>[
               const AiPageHeader(
-                title: 'Chat với AI',
-                subtitle: 'Hỏi đáp thông minh theo nội dung tài liệu đã chọn.',
+                title: 'AI Chat',
+                subtitle: 'Ask intelligent questions about the selected document.',
                 icon: Icons.forum_outlined,
               ),
               const SizedBox(height: 16),
@@ -99,7 +99,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             itemCount: messages.length + (_busy ? 1 : 0),
             itemBuilder: (BuildContext context, int index) {
               if (_busy && index == messages.length) {
-                return const _ChatBubble(text: 'AI đang suy nghĩ...', fromUser: false, pending: true);
+                return const _ChatBubble(text: 'AI is thinking...', fromUser: false, pending: true);
               }
               final ChatMessage message = messages[index];
               return _ChatBubble(text: message.text, fromUser: message.fromUser);
@@ -122,8 +122,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
                   hintText: documentId == null
-                      ? 'Chọn tài liệu trước khi hỏi...'
-                      : 'Nhập câu hỏi cho AI...',
+                      ? 'Select a document before asking...'
+                      : 'Ask AI a question...',
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   suffixIcon: IconButton(
@@ -131,7 +131,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                         ? null
                         : _send,
                     icon: const Icon(Icons.arrow_upward_rounded),
-                    tooltip: 'Gửi câu hỏi',
+                    tooltip: 'Send question',
                   ),
                 ),
               ),

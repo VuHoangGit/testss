@@ -6,13 +6,27 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData light() {
-    final ColorScheme scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF3D5AFE),
-    );
+  static ThemeData light() => _base(
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.light,
+        ),
+      );
+
+  static ThemeData dark() => _base(
+        ColorScheme.fromSeed(
+          seedColor: const Color(0xFF6366F1),
+          brightness: Brightness.dark,
+        ),
+      );
+
+  /// Component chung cho cả 2 chế độ — chỉ khác ColorScheme.
+  static ThemeData _base(ColorScheme scheme) {
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+      fontFamily: 'Roboto',
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
@@ -22,6 +36,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         filled: true,
+        fillColor: scheme.surface,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -37,6 +52,7 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         elevation: 0,
+        color: scheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
           side: BorderSide(color: scheme.outlineVariant),
