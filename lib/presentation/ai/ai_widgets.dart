@@ -8,24 +8,47 @@ class AiDocumentPicker extends StatelessWidget {
     required this.documents,
     required this.value,
     required this.onChanged,
+    this.filter,
+    this.labelText = 'Tài liệu PDF',
+    this.prefixIcon = Icons.picture_as_pdf_outlined,
+    this.emptyHint = 'Chưa có tài liệu nào',
   });
 
   final List<DocumentItem> documents;
   final String? value;
   final ValueChanged<String?>? onChanged;
 
+  /// Lọc loại tài liệu hiển thị; mặc định chỉ PDF (giữ hành vi OCR/Chat).
+  final bool Function(DocumentItem document)? filter;
+  final String labelText;
+  final IconData prefixIcon;
+  final String emptyHint;
+
   @override
   Widget build(BuildContext context) {
-    final List<DocumentItem> pdfs =
-        documents.where((DocumentItem document) => document.isPdf).toList();
+    final List<DocumentItem> items = documents
+        .where(filter ?? (DocumentItem document) => document.isPdf)
+        .toList();
+    if (items.isEmpty) {
+      return DropdownButtonFormField<String>(
+        initialValue: null,
+        decoration: InputDecoration(
+          labelText: labelText,
+          prefixIcon: Icon(prefixIcon),
+          helperText: emptyHint,
+        ),
+        items: const <DropdownMenuItem<String>>[],
+        onChanged: null,
+      );
+    }
     return DropdownButtonFormField<String>(
       initialValue: value,
-      decoration: const InputDecoration(
-        labelText: 'Tài liệu PDF',
-        prefixIcon: Icon(Icons.picture_as_pdf_outlined),
+      decoration: InputDecoration(
+        labelText: labelText,
+        prefixIcon: Icon(prefixIcon),
       ),
       items: <DropdownMenuItem<String>>[
-        for (final DocumentItem document in pdfs)
+        for (final DocumentItem document in items)
           DropdownMenuItem<String>(
             value: document.id,
             child: Text(document.name, overflow: TextOverflow.ellipsis),

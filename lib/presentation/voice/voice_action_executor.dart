@@ -193,10 +193,7 @@ Future<String> _openDocument(
     onAmbiguous: (String message) => feedback = message,
   );
   if (doc == null) return feedback;
-  if (!doc.isPdf) {
-    return '"${doc.name}" không phải PDF nên chưa xem trước được.';
-  }
-  return openPdfViewer(
+  return openDocumentViewer(
     repository: ref.read(documentsRepositoryProvider),
     aiRepository: ref.read(aiRepositoryProvider),
     doc: doc,

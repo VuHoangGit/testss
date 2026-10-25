@@ -164,12 +164,8 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Future<void> _openViewer(DocumentItem doc) async {
-    if (!doc.isPdf) {
-      _showSnack('Chỉ hỗ trợ xem trước file PDF');
-      return;
-    }
     await _guard(
-      () => openPdfViewer(
+      () => openDocumentViewer(
         repository: ref.read(documentsRepositoryProvider),
         aiRepository: ref.read(aiRepositoryProvider),
         doc: doc,
@@ -501,7 +497,7 @@ class _DocumentTile extends StatelessWidget {
                 PopupMenuItem<String>(value: 'delete', child: Text('Xóa')),
               ],
             ),
-      onTap: selectionMode ? onToggleSelect : (doc.isPdf ? onOpenViewer : null),
+      onTap: selectionMode ? onToggleSelect : onOpenViewer,
     );
   }
 }

@@ -43,14 +43,32 @@ class AiRepositoryImpl implements AiRepository {
   }
 
   @override
+  Future<String> extractText(String documentId) async {
+    try {
+      final Response<dynamic> response = await dio.get<dynamic>(
+        '/ai/extract-text/$documentId',
+      );
+      return (response.data as Map<String, dynamic>)['text'] as String;
+    } on DioException catch (error) {
+      throw mapDioException(error, fallback: 'Không đọc được nội dung tài liệu');
+    }
+  }
+
+  @override
   Future<String> translate(
     String text, {
     String targetLanguage = 'English',
+    String? sourceLanguage,
   }) async {
     try {
       final Response<dynamic> response = await dio.post<dynamic>(
         '/ai/translate',
-        data: <String, String>{'text': text, 'target_language': targetLanguage},
+        data: <String, dynamic>{
+          'text': text,
+          'target_language': targetLanguage,
+          if (sourceLanguage != null && sourceLanguage.trim().isNotEmpty)
+            'source_language': sourceLanguage.trim(),
+        },
       );
       return (response.data as Map<String, dynamic>)['translation'] as String;
     } on DioException catch (error) {

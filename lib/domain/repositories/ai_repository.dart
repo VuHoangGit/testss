@@ -59,7 +59,15 @@ abstract interface class AiRepository {
 
   Future<Uint8List> ocrWord(String documentId);
 
-  Future<String> translate(String text, {String targetLanguage = 'English'});
+  /// Trích văn bản của tài liệu (PDF/Word/txt/md) để hiển thị + dịch vùng chọn.
+  Future<String> extractText(String documentId);
+
+  /// [sourceLanguage] null/rỗng = tự phát hiện ngôn ngữ nguồn.
+  Future<String> translate(
+    String text, {
+    String targetLanguage = 'English',
+    String? sourceLanguage,
+  });
 
   Future<String> chat(String question, {required List<String> documentIds});
 
