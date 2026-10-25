@@ -170,7 +170,11 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                     ],
                     selected: <_SourceMode>{_mode},
                     onSelectionChanged: (Set<_SourceMode> selection) =>
-                        setState(() => _mode = selection.first),
+                        setState(() {
+                          _mode = selection.first;
+                          _selection = null;
+                          _translation = null;
+                        }),
                   ),
                   const SizedBox(height: 16),
                   if (_mode == _SourceMode.document)
@@ -405,9 +409,13 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
               onSelectionChanged: (SelectedContent? selected) {
                 if (!mounted) return;
                 final String? plain = selected?.plainText.trim();
-                setState(() {
-                  _selection = (plain == null || plain.isEmpty) ? null : plain;
-                });
+                // Giữ lại vùng chọn gần nhất: bấm nút Dịch làm mất focus
+                // vùng chọn (sự kiện null chạy TRƯỚC onPressed của nút),
+                // nên không bao giờ clear về null ở đây — chỉ xoá khi đổi
+                // tài liệu / đổi chế độ / tải lại nội dung.
+                if (plain != null && plain.isNotEmpty) {
+                  setState(() => _selection = plain);
+                }
               },
               child: Scrollbar(
                 child: SingleChildScrollView(

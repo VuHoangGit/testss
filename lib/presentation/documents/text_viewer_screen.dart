@@ -63,12 +63,12 @@ class _TextViewerScreenState extends State<TextViewerScreen> {
         onSelectionChanged: (SelectedContent? content) {
           if (!mounted) return;
           final String? selection = content?.plainText.trim();
-          setState(() {
-            _selectedText = (selection == null || selection.isEmpty)
-                ? null
-                : selection;
-            if (_selectedText == null) _translation = null;
-          });
+          // Giữ lại vùng chọn gần nhất: bấm nút "Dịch vùng chọn" làm mất
+          // focus vùng chọn (sự kiện null chạy TRƯỚC onPressed), nên không
+          // clear ở đây — thanh dưới vẫn hiện vùng chọn vừa bôi đen.
+          if (selection != null && selection.isNotEmpty) {
+            setState(() => _selectedText = selection);
+          }
         },
         child: Scrollbar(
           child: SingleChildScrollView(
