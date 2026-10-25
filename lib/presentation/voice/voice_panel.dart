@@ -82,8 +82,7 @@ class _VoicePanelState extends ConsumerState<VoicePanel> {
                   ),
                 ),
               ),
-            if (voice.transcript != null &&
-                voice.phase != VoicePhase.listening)
+            if (voice.transcript != null && voice.phase != VoicePhase.listening)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
@@ -91,7 +90,8 @@ class _VoicePanelState extends ConsumerState<VoicePanel> {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-            if (voice.reply != null && voice.phase == VoicePhase.idle) ...<Widget>[
+            if (voice.reply != null &&
+                voice.phase == VoicePhase.idle) ...<Widget>[
               const SizedBox(height: 6),
               Text(voice.reply!),
               const SizedBox(height: 8),
@@ -112,7 +112,10 @@ class _VoicePanelState extends ConsumerState<VoicePanel> {
         return SizedBox(
           width: 20,
           height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2, color: colors.primary),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: colors.primary,
+          ),
         );
       case VoicePhase.idle:
         return Icon(Icons.smart_toy_outlined, color: colors.primary);
@@ -142,7 +145,8 @@ class _VoicePanelState extends ConsumerState<VoicePanel> {
       },
       decoration: InputDecoration(
         isDense: true,
-        hintText: 'Hoặc gõ lệnh, ví dụ: "vào tab tài liệu", "quét OCR file hợp đồng"',
+        hintText:
+            'Hoặc gõ lệnh, ví dụ: "vào tab tài liệu", "quét OCR file hợp đồng"',
         suffixIcon: IconButton(
           tooltip: 'Gửi lệnh',
           icon: const Icon(Icons.send_outlined),

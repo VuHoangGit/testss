@@ -31,9 +31,7 @@ class ThemeModeController extends Notifier<ThemeMode> {
   /// Đảo sáng ↔ tối so với chế độ HIỆN TẠI (kể cả khi đang theo hệ thống).
   void toggle(Brightness platformBrightness) {
     final Brightness current = effectiveBrightness(platformBrightness);
-    setMode(
-      current == Brightness.dark ? ThemeMode.light : ThemeMode.dark,
-    );
+    setMode(current == Brightness.dark ? ThemeMode.light : ThemeMode.dark);
   }
 
   Brightness effectiveBrightness(Brightness platformBrightness) {

@@ -12,18 +12,19 @@ class UserModel {
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        name: json['name'] as String?,
-        avatarUrl: json['avatar_url'] as String?,
-      );
+    id: json['id'] as String,
+    email: json['email'] as String,
+    name: json['name'] as String?,
+    avatarUrl: json['avatar_url'] as String?,
+  );
 
   final String id;
   final String email;
   final String? name;
   final String? avatarUrl;
 
-  User toEntity() => User(id: id, email: email, name: name, avatarUrl: avatarUrl);
+  User toEntity() =>
+      User(id: id, email: email, name: name, avatarUrl: avatarUrl);
 }
 
 class TokenResponseModel {

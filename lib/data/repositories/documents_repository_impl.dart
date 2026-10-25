@@ -22,9 +22,13 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
   Future<List<DocumentFolder>> listFolders() async {
     try {
       final Response<dynamic> res = await dio.get<dynamic>('/folders');
-      final List<dynamic> items = (res.data as List<dynamic>? ?? const <dynamic>[]);
+      final List<dynamic> items =
+          (res.data as List<dynamic>? ?? const <dynamic>[]);
       return items
-          .map((dynamic e) => DocumentFolderModel.fromJson(e as Map<String, dynamic>))
+          .map(
+            (dynamic e) =>
+                DocumentFolderModel.fromJson(e as Map<String, dynamic>),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw mapDioException(e, fallback: 'Không tải được thư mục');
@@ -58,11 +62,17 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     try {
       final Response<dynamic> res = await dio.get<dynamic>(
         '/documents',
-        queryParameters: folderId == null ? null : <String, String>{'folder_id': folderId},
+        queryParameters: folderId == null
+            ? null
+            : <String, String>{'folder_id': folderId},
       );
-      final List<dynamic> items = (res.data as List<dynamic>? ?? const <dynamic>[]);
+      final List<dynamic> items =
+          (res.data as List<dynamic>? ?? const <dynamic>[]);
       return items
-          .map((dynamic e) => DocumentItemModel.fromJson(e as Map<String, dynamic>))
+          .map(
+            (dynamic e) =>
+                DocumentItemModel.fromJson(e as Map<String, dynamic>),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw mapDioException(e, fallback: 'Không tải được tài liệu');
@@ -79,7 +89,11 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     try {
       final FormData form = FormData.fromMap(<String, dynamic>{
         'folder_id': ?folderId,
-        'file': MultipartFile.fromBytes(bytes, filename: fileName, contentType: _mediaType(fileName)),
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+          contentType: _mediaType(fileName),
+        ),
       });
       final Response<dynamic> res = await dio.post<dynamic>(
         '/documents',
@@ -131,15 +145,22 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
   }
 
   @override
-  Future<List<DocumentItem>> splitDocument(String documentId, {required String ranges}) async {
+  Future<List<DocumentItem>> splitDocument(
+    String documentId, {
+    required String ranges,
+  }) async {
     try {
       final Response<dynamic> res = await dio.post<dynamic>(
         '/documents/$documentId/split',
         data: <String, dynamic>{'ranges': ranges},
       );
-      final List<dynamic> items = (res.data as List<dynamic>? ?? const <dynamic>[]);
+      final List<dynamic> items =
+          (res.data as List<dynamic>? ?? const <dynamic>[]);
       return items
-          .map((dynamic e) => DocumentItemModel.fromJson(e as Map<String, dynamic>))
+          .map(
+            (dynamic e) =>
+                DocumentItemModel.fromJson(e as Map<String, dynamic>),
+          )
           .toList(growable: false);
     } on DioException catch (e) {
       throw mapDioException(e, fallback: 'Không tách được tài liệu');
@@ -147,14 +168,26 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
   }
 
   @override
-  Future<DocumentItem> protectDocument(String documentId, {required String password}) =>
-      _passwordAction('/documents/$documentId/protect', documentId, password,
-          fallback: 'Không đặt được mật khẩu');
+  Future<DocumentItem> protectDocument(
+    String documentId, {
+    required String password,
+  }) => _passwordAction(
+    '/documents/$documentId/protect',
+    documentId,
+    password,
+    fallback: 'Không đặt được mật khẩu',
+  );
 
   @override
-  Future<DocumentItem> unprotectDocument(String documentId, {required String password}) =>
-      _passwordAction('/documents/$documentId/unprotect', documentId, password,
-          fallback: 'Không gỡ được mật khẩu');
+  Future<DocumentItem> unprotectDocument(
+    String documentId, {
+    required String password,
+  }) => _passwordAction(
+    '/documents/$documentId/unprotect',
+    documentId,
+    password,
+    fallback: 'Không gỡ được mật khẩu',
+  );
 
   Future<DocumentItem> _passwordAction(
     String path,
@@ -188,7 +221,8 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       'doc': 'application/msword',
       'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'xls': 'application/vnd.ms-excel',
-      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'xlsx':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'ppt': 'application/vnd.ms-powerpoint',
       'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     };

@@ -58,14 +58,17 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
 
   Future<void> _reload() async {
     final DocumentsState current = state.value ?? const DocumentsState();
-    final List<DocumentItem> docs =
-        await _repo.listDocuments(folderId: current.selectedFolderId);
+    final List<DocumentItem> docs = await _repo.listDocuments(
+      folderId: current.selectedFolderId,
+    );
     state = AsyncData(current.copyWith(documents: docs));
   }
 
   Future<void> selectFolder(String? folderId) async {
     final DocumentsState current = state.value ?? const DocumentsState();
-    final List<DocumentItem> docs = await _repo.listDocuments(folderId: folderId);
+    final List<DocumentItem> docs = await _repo.listDocuments(
+      folderId: folderId,
+    );
     state = AsyncData(
       current.copyWith(selectedFolderId: folderId, documents: docs),
     );
@@ -83,8 +86,9 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     final DocumentsState current = state.value ?? const DocumentsState();
     final List<DocumentFolder> folders = await _repo.listFolders();
     final bool wasSelected = current.selectedFolderId == folderId;
-    final List<DocumentItem> docs =
-        await _repo.listDocuments(folderId: wasSelected ? null : current.selectedFolderId);
+    final List<DocumentItem> docs = await _repo.listDocuments(
+      folderId: wasSelected ? null : current.selectedFolderId,
+    );
     state = AsyncData(
       current.copyWith(
         folders: folders,
@@ -104,8 +108,20 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     final List<PlatformFile> picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: <String>[
-        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
-        'png', 'jpg', 'jpeg', 'gif', 'txt', 'md', 'zip',
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'png',
+        'jpg',
+        'jpeg',
+        'gif',
+        'txt',
+        'md',
+        'zip',
       ],
     );
     if (picked.isEmpty) {
@@ -146,7 +162,10 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
       next.remove(documentId);
     }
     state = AsyncData(
-      current.copyWith(selection: next, selectionMode: next.isNotEmpty || current.selectionMode),
+      current.copyWith(
+        selection: next,
+        selectionMode: next.isNotEmpty || current.selectionMode,
+      ),
     );
   }
 
@@ -186,20 +205,38 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     return merged.name;
   }
 
-  Future<List<String>> splitDocument(String documentId, {required String ranges}) async {
-    final List<DocumentItem> parts = await _repo.splitDocument(documentId, ranges: ranges);
+  Future<List<String>> splitDocument(
+    String documentId, {
+    required String ranges,
+  }) async {
+    final List<DocumentItem> parts = await _repo.splitDocument(
+      documentId,
+      ranges: ranges,
+    );
     await _reload();
     return parts.map((DocumentItem d) => d.name).toList(growable: false);
   }
 
-  Future<String> protectDocument(String documentId, {required String password}) async {
-    final DocumentItem doc = await _repo.protectDocument(documentId, password: password);
+  Future<String> protectDocument(
+    String documentId, {
+    required String password,
+  }) async {
+    final DocumentItem doc = await _repo.protectDocument(
+      documentId,
+      password: password,
+    );
     await _reload();
     return doc.name;
   }
 
-  Future<String> unprotectDocument(String documentId, {required String password}) async {
-    final DocumentItem doc = await _repo.unprotectDocument(documentId, password: password);
+  Future<String> unprotectDocument(
+    String documentId, {
+    required String password,
+  }) async {
+    final DocumentItem doc = await _repo.unprotectDocument(
+      documentId,
+      password: password,
+    );
     await _reload();
     return doc.name;
   }

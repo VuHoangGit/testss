@@ -13,8 +13,7 @@ class ThemeToggleButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Watch để icon cập nhật ngay khi đổi chế độ.
     ref.watch(themeModeProvider);
-    final ThemeModeController controller =
-        ref.read(themeModeProvider.notifier);
+    final ThemeModeController controller = ref.read(themeModeProvider.notifier);
     final Brightness platform = MediaQuery.platformBrightnessOf(context);
     final bool isDark =
         controller.effectiveBrightness(platform) == Brightness.dark;

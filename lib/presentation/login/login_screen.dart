@@ -50,7 +50,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final String password = _password.text;
     try {
       if (_registerMode) {
-        await controller.signUp(email: email, password: password, name: _name.text.trim());
+        await controller.signUp(
+          email: email,
+          password: password,
+          name: _name.text.trim(),
+        );
         // Đăng ký xong KHÔNG tự đăng nhập — quay lại form đăng nhập, giữ sẵn email
         setState(() {
           _registerMode = false;
@@ -101,8 +105,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         : 'Your intelligent document workspace',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                   ),
                   const SizedBox(height: 28),
                   TextFormField(
@@ -135,7 +139,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     obscureText: true,
                     decoration: InputDecoration(
                       labelText: 'Password',
-                      helperText: _registerMode ? 'At least 6 characters' : null,
+                      helperText: _registerMode
+                          ? 'At least 6 characters'
+                          : null,
                       prefixIcon: const Icon(Icons.lock_outline),
                     ),
                     validator: (String? v) {
@@ -165,9 +171,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: busy
                         ? null
                         : () => setState(() {
-                              _registerMode = !_registerMode;
-                              _password.clear();
-                            }),
+                            _registerMode = !_registerMode;
+                            _password.clear();
+                          }),
                     child: Text(
                       _registerMode
                           ? 'Already have an account? Sign in'
@@ -179,9 +185,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: busy
                         ? null
                         : () => _showSnack(
-                              'Google sign-in will be available after configuring '
-                              'the OAuth client ID.',
-                            ),
+                            'Google sign-in will be available after configuring '
+                            'the OAuth client ID.',
+                          ),
                     icon: const Icon(Icons.g_mobiledata),
                     label: const Text('Continue with Google'),
                   ),

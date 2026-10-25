@@ -22,7 +22,8 @@ class SpeechService {
     if (_initialized) return _available;
     try {
       _available = await _stt.initialize(
-        onError: (SpeechRecognitionError error) => onError?.call(error.errorMsg),
+        onError: (SpeechRecognitionError error) =>
+            onError?.call(error.errorMsg),
       );
     } on Exception {
       _available = false;

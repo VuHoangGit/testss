@@ -46,16 +46,15 @@ class VoiceState {
     bool? ttsEnabled,
     bool? micAvailable,
     String? lastError,
-  }) =>
-      VoiceState(
-        phase: phase ?? this.phase,
-        interim: interim ?? this.interim,
-        transcript: transcript ?? this.transcript,
-        reply: reply ?? this.reply,
-        ttsEnabled: ttsEnabled ?? this.ttsEnabled,
-        micAvailable: micAvailable ?? this.micAvailable,
-        lastError: lastError ?? this.lastError,
-      );
+  }) => VoiceState(
+    phase: phase ?? this.phase,
+    interim: interim ?? this.interim,
+    transcript: transcript ?? this.transcript,
+    reply: reply ?? this.reply,
+    ttsEnabled: ttsEnabled ?? this.ttsEnabled,
+    micAvailable: micAvailable ?? this.micAvailable,
+    lastError: lastError ?? this.lastError,
+  );
 }
 
 final NotifierProvider<VoiceController, VoiceState> voiceControllerProvider =
@@ -137,7 +136,7 @@ class VoiceController extends Notifier<VoiceState> {
       lastError: message,
       reply: permission
           ? 'Chưa cấp quyền micro. Hãy cho phép micro cho trang này trong '
-              'cài đặt trình duyệt rồi bấm nút mic lại.'
+                'cài đặt trình duyệt rồi bấm nút mic lại.'
           : 'Lỗi nhận dạng giọng nói ($message). Thử lại hoặc gõ lệnh vào ô văn bản.',
     );
   }
@@ -160,7 +159,11 @@ class VoiceController extends Notifier<VoiceState> {
     try {
       final VoiceCommandResult decision = await ref
           .read(aiRepositoryProvider)
-          .voiceCommand(transcript, context: _buildContext(), sessionId: _sessionId);
+          .voiceCommand(
+            transcript,
+            context: _buildContext(),
+            sessionId: _sessionId,
+          );
       state = state.copyWith(phase: VoicePhase.executing);
       String feedback = decision.reply;
       if (decision.action == 'stop_speaking') {

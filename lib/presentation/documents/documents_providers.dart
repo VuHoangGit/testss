@@ -10,11 +10,11 @@ import 'documents_controller.dart';
 
 final Provider<DocumentsRepository> documentsRepositoryProvider =
     Provider<DocumentsRepository>(
-  (Ref ref) => DocumentsRepositoryImpl(dio: ref.watch(apiDioProvider)),
-);
+      (Ref ref) => DocumentsRepositoryImpl(dio: ref.watch(apiDioProvider)),
+    );
 
 final AsyncNotifierProvider<DocumentsController, DocumentsState>
-    documentsControllerProvider =
+documentsControllerProvider =
     AsyncNotifierProvider<DocumentsController, DocumentsState>(
-  DocumentsController.new,
-);
+      DocumentsController.new,
+    );

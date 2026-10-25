@@ -35,9 +35,18 @@ abstract interface class DocumentsRepository {
   });
 
   /// Tách trang theo phạm vi "1-3,5" → danh sách tài liệu PDF mới.
-  Future<List<DocumentItem>> splitDocument(String documentId, {required String ranges});
+  Future<List<DocumentItem>> splitDocument(
+    String documentId, {
+    required String ranges,
+  });
 
-  Future<DocumentItem> protectDocument(String documentId, {required String password});
+  Future<DocumentItem> protectDocument(
+    String documentId, {
+    required String password,
+  });
 
-  Future<DocumentItem> unprotectDocument(String documentId, {required String password});
+  Future<DocumentItem> unprotectDocument(
+    String documentId, {
+    required String password,
+  });
 }

@@ -4,7 +4,10 @@ library;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 abstract class TokenStorage {
-  Future<void> save({required String accessToken, required String refreshToken});
+  Future<void> save({
+    required String accessToken,
+    required String refreshToken,
+  });
 
   /// Trả về (accessToken, refreshToken) — phần tử null nếu chưa có.
   Future<(String?, String?)> read();
@@ -19,7 +22,7 @@ class SecureTokenStorage implements TokenStorage {
   final FlutterSecureStorage _storage;
 
   SecureTokenStorage([FlutterSecureStorage? storage])
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   @override
   Future<void> save({

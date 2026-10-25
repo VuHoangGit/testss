@@ -11,8 +11,9 @@ class SessionRefresher {
   Future<void> run(Future<void> Function() doRefresh) {
     final Future<void>? existing = _inFlight;
     if (existing != null) return existing;
-    final Future<void> future =
-        doRefresh().whenComplete(() => _inFlight = null);
+    final Future<void> future = doRefresh().whenComplete(
+      () => _inFlight = null,
+    );
     _inFlight = future;
     return future;
   }

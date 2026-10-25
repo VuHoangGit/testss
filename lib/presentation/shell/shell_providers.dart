@@ -5,7 +5,12 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Index tab: 0 Tổng quan · 1 Tài liệu · 2 AI · 3 Tài khoản.
-const List<String> shellTabIds = <String>['dashboard', 'documents', 'ai', 'account'];
+const List<String> shellTabIds = <String>[
+  'dashboard',
+  'documents',
+  'ai',
+  'account',
+];
 
 final NotifierProvider<ShellTabController, int> shellTabProvider =
     NotifierProvider<ShellTabController, int>(ShellTabController.new);

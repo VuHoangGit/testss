@@ -16,10 +16,15 @@ String? extractDetail(Object? data) {
   return null;
 }
 
-Exception mapDioException(DioException e, {String fallback = 'Có lỗi xảy ra, thử lại sau'}) {
+Exception mapDioException(
+  DioException e, {
+  String fallback = 'Có lỗi xảy ra, thử lại sau',
+}) {
   final int? code = e.response?.statusCode;
   if (code == 401 || code == 403) {
-    return AuthException(extractDetail(e.response?.data) ?? 'Phiên đăng nhập không hợp lệ');
+    return AuthException(
+      extractDetail(e.response?.data) ?? 'Phiên đăng nhập không hợp lệ',
+    );
   }
   if (code != null && code >= 500) {
     return const NetworkException('Máy chủ đang gặp sự cố, thử lại sau');

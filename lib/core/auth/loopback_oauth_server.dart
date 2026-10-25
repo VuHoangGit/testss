@@ -60,7 +60,10 @@ class LoopbackOAuthServer {
           throw AuthException('Google trả về lỗi: $error');
         }
         if (state != expectedState || code == null) {
-          await _respondAndClose(request, 'Yêu cầu không hợp lệ (state không khớp).');
+          await _respondAndClose(
+            request,
+            'Yêu cầu không hợp lệ (state không khớp).',
+          );
           throw StateError('State không khớp hoặc thiếu code');
         }
         await _respondAndClose(

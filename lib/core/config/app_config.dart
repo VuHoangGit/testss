@@ -25,15 +25,18 @@ class AppConfig {
   }
 
   /// Web client ID (Google OAuth) — dùng khi tích hợp đăng nhập Google thật.
-  static const String googleWebClientId =
-      String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
+  static const String googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+  );
 
   /// Desktop client ID — cho luồng loopback + PKCE trên Windows (google_sign_in
   /// không hỗ trợ Windows; xem lib/core/auth/desktop_google_sign_in.dart).
-  static const String googleDesktopClientId =
-      String.fromEnvironment('GOOGLE_DESKTOP_CLIENT_ID');
+  static const String googleDesktopClientId = String.fromEnvironment(
+    'GOOGLE_DESKTOP_CLIENT_ID',
+  );
 
   /// iOS client ID — khai báo GIDClientID trong Info.plist khi tích hợp.
-  static const String googleIosClientId =
-      String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const String googleIosClientId = String.fromEnvironment(
+    'GOOGLE_IOS_CLIENT_ID',
+  );
 }

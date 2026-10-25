@@ -26,14 +26,19 @@ class AccountTab extends ConsumerWidget {
         const SizedBox(height: 12),
         Card(
           child: ListTile(
-            leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+            leading: Icon(
+              Icons.logout,
+              color: Theme.of(context).colorScheme.error,
+            ),
             title: const Text('Sign out'),
             onTap: () async {
               final bool? ok = await showDialog<bool>(
                 context: context,
                 builder: (BuildContext ctx) => AlertDialog(
                   title: const Text('Sign out?'),
-                  content: const Text('Your session will end on this device. Your data will not be deleted.'),
+                  content: const Text(
+                    'Your session will end on this device. Your data will not be deleted.',
+                  ),
                   actions: <Widget>[
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),

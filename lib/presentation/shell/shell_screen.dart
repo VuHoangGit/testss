@@ -25,8 +25,9 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     final int index = ref.watch(shellTabProvider);
-    final ShellTabController tabController =
-        ref.read(shellTabProvider.notifier);
+    final ShellTabController tabController = ref.read(
+      shellTabProvider.notifier,
+    );
     final bool wide = MediaQuery.sizeOf(context).width >= 900;
     final List<Widget> tabs = <Widget>[
       DashboardTab(user: widget.session.user),
@@ -43,8 +44,10 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(destinations[index].$1,
-            style: const TextStyle(fontWeight: FontWeight.w700)),
+        title: Text(
+          destinations[index].$1,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         actions: const <Widget>[VoiceMicButton()],
       ),
       body: Column(

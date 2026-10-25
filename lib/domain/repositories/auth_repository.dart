@@ -12,7 +12,11 @@ abstract interface class AuthRepository {
 
   /// Đăng ký tài khoản email/mật khẩu. KHÔNG tự đăng nhập — thành công thì
   /// client yêu cầu nhập lại thông tin để đăng nhập. Trùng email → AuthException.
-  Future<void> register({required String email, required String password, String? name});
+  Future<void> register({
+    required String email,
+    required String password,
+    String? name,
+  });
 
   /// Đăng nhập email/mật khẩu → phiên mới. Sai thông tin → AuthException (401).
   Future<AuthSession> login({required String email, required String password});

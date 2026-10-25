@@ -54,9 +54,9 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
     if (documentId == null) return;
     setState(() => _extracting = true);
     try {
-      final String text = await ref.read(aiRepositoryProvider).extractText(
-            documentId,
-          );
+      final String text = await ref
+          .read(aiRepositoryProvider)
+          .extractText(documentId);
       if (mounted) {
         setState(() {
           _content = text;
@@ -88,15 +88,14 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
     }
     setState(() => _translating = true);
     try {
-      final String result = await ref.read(aiRepositoryProvider).translate(
+      final String result = await ref
+          .read(aiRepositoryProvider)
+          .translate(
             text,
             targetLanguage: _targetValue,
-            sourceLanguage:
-                _sourceValue.isEmpty ? null : _sourceValue,
+            sourceLanguage: _sourceValue.isEmpty ? null : _sourceValue,
           );
-      ref
-          .read(lastAiResultsProvider.notifier)
-          .setTranslation(text, result);
+      ref.read(lastAiResultsProvider.notifier).setTranslation(text, result);
       if (mounted) setState(() => _translation = result);
     } on Exception catch (error) {
       if (mounted) {
@@ -133,7 +132,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
   Widget build(BuildContext context) {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
-            <DocumentItem>[];
+        <DocumentItem>[];
     final bool wide = MediaQuery.of(context).size.width >= 1000;
 
     return Column(
@@ -143,8 +142,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
           child: const AiPageHeader(
             title: 'Translate',
-            subtitle:
-                'Select a document and highlight text — or paste text directly.',
+            subtitle: 'Select a document and highlight text — or paste text directly.',
             icon: Icons.translate_outlined,
           ),
         ),
@@ -201,9 +199,11 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
                         const SizedBox(width: 12),
                         FilledButton.tonalIcon(
                           onPressed:
-                              _extracting || _documentId == null || _content != null
-                                  ? null
-                                  : _showContent,
+                              _extracting ||
+                                  _documentId == null ||
+                                  _content != null
+                              ? null
+                              : _showContent,
                           icon: _extracting
                               ? const SizedBox(
                                   width: 16,
@@ -348,9 +348,7 @@ class _AiTranslateScreenState extends ConsumerState<AiTranslateScreen> {
       );
     }
     if (_extracting) {
-      return const Card(
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const Card(child: Center(child: CircularProgressIndicator()));
     }
     final String? content = _content;
     if (content == null) {

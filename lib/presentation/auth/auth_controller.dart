@@ -21,8 +21,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     final AuthRepository repo = ref.read(authRepositoryProvider);
     state = const AsyncValue<AuthSession?>.loading();
     try {
-      final AuthSession session =
-          await repo.devLogin(email: email, name: name);
+      final AuthSession session = await repo.devLogin(email: email, name: name);
       state = AsyncValue<AuthSession?>.data(session);
     } on Exception catch (e, st) {
       state = AsyncValue<AuthSession?>.error(e, st);
@@ -35,7 +34,10 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     final AuthRepository repo = ref.read(authRepositoryProvider);
     state = const AsyncValue<AuthSession?>.loading();
     try {
-      final AuthSession session = await repo.login(email: email, password: password);
+      final AuthSession session = await repo.login(
+        email: email,
+        password: password,
+      );
       state = AsyncValue<AuthSession?>.data(session);
     } on Exception {
       // Về trạng thái chưa đăng nhập → ở lại màn hình login

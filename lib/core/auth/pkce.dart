@@ -18,8 +18,10 @@ class Pkce {
     final Random rand = random ?? Random.secure();
     const String chars =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    final String verifier =
-        List<String>.generate(64, (_) => chars[rand.nextInt(chars.length)]).join();
+    final String verifier = List<String>.generate(
+      64,
+      (_) => chars[rand.nextInt(chars.length)],
+    ).join();
     return Pkce(verifier, challengeFor(verifier));
   }
 

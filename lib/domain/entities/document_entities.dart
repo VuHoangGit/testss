@@ -23,9 +23,25 @@ class DocumentItem {
   /// Đuôi file văn bản thuần — khớp danh sách backend dùng để trích text
   /// (client-uploader có thể gửi mime `application/octet-stream`).
   static const List<String> _textExtensions = <String>[
-    '.txt', '.md', '.markdown', '.csv', '.json', '.log', '.xml', '.yml',
-    '.yaml', '.py', '.js', '.ts', '.dart', '.java', '.c', '.cpp', '.html',
-    '.css', '.ini',
+    '.txt',
+    '.md',
+    '.markdown',
+    '.csv',
+    '.json',
+    '.log',
+    '.xml',
+    '.yml',
+    '.yaml',
+    '.py',
+    '.js',
+    '.ts',
+    '.dart',
+    '.java',
+    '.c',
+    '.cpp',
+    '.html',
+    '.css',
+    '.ini',
   ];
 
   bool get isPdf => mimeType == 'application/pdf';

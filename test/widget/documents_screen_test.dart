@@ -19,7 +19,8 @@ class _FakeDocumentsRepository implements DocumentsRepository {
   }) => throw UnimplementedError();
 
   @override
-  Future<DocumentFolder> createFolder(String name) => throw UnimplementedError();
+  Future<DocumentFolder> createFolder(String name) =>
+      throw UnimplementedError();
 
   @override
   Future<void> deleteDocument(String documentId) => throw UnimplementedError();
@@ -28,12 +29,13 @@ class _FakeDocumentsRepository implements DocumentsRepository {
   Future<void> deleteFolder(String folderId) => throw UnimplementedError();
 
   @override
-  Future<Uint8List> downloadDocument(String documentId) => throw UnimplementedError();
+  Future<Uint8List> downloadDocument(String documentId) =>
+      throw UnimplementedError();
 
   @override
   Future<List<DocumentFolder>> listFolders() async => <DocumentFolder>[
-        const DocumentFolder(id: 'f1', name: 'Hợp đồng', documentCount: 1),
-      ];
+    const DocumentFolder(id: 'f1', name: 'Hợp đồng', documentCount: 1),
+  ];
 
   final DocumentItem _sample = DocumentItem(
     id: 'd1',
@@ -50,12 +52,16 @@ class _FakeDocumentsRepository implements DocumentsRepository {
       <DocumentItem>[_sample];
 
   @override
-  Future<DocumentItem> protectDocument(String documentId, {required String password}) =>
-      throw UnimplementedError();
+  Future<DocumentItem> protectDocument(
+    String documentId, {
+    required String password,
+  }) => throw UnimplementedError();
 
   @override
-  Future<DocumentItem> unprotectDocument(String documentId, {required String password}) =>
-      throw UnimplementedError();
+  Future<DocumentItem> unprotectDocument(
+    String documentId, {
+    required String password,
+  }) => throw UnimplementedError();
 
   @override
   Future<DocumentItem> uploadDocument({
@@ -66,15 +72,19 @@ class _FakeDocumentsRepository implements DocumentsRepository {
   }) => throw UnimplementedError();
 
   @override
-  Future<List<DocumentItem>> splitDocument(String documentId, {required String ranges}) =>
-      throw UnimplementedError();
+  Future<List<DocumentItem>> splitDocument(
+    String documentId, {
+    required String ranges,
+  }) => throw UnimplementedError();
 }
 
 Future<void> _pump(WidgetTester tester) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        documentsRepositoryProvider.overrideWithValue(_FakeDocumentsRepository()),
+        documentsRepositoryProvider.overrideWithValue(
+          _FakeDocumentsRepository(),
+        ),
       ],
       child: const MaterialApp(home: Scaffold(body: DocumentsScreen())),
     ),
@@ -83,20 +93,24 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('hiện toolbar, chip thư mục và danh sách tài liệu', (WidgetTester tester) async {
+  testWidgets('hiện toolbar, chip thư mục và danh sách tài liệu', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
-    expect(find.text('Tải lên'), findsOneWidget);
-    expect(find.text('Thư mục mới'), findsOneWidget);
+    expect(find.text('Upload'), findsOneWidget);
+    expect(find.text('New folder'), findsOneWidget);
     expect(find.textContaining('Hợp đồng'), findsWidgets);
     expect(find.text('hop-dong.pdf'), findsOneWidget);
     expect(find.textContaining('3 trang'), findsOneWidget);
   });
 
-  testWidgets('bật chế độ chọn để gộp hiện nút Gộp', (WidgetTester tester) async {
+  testWidgets('bật chế độ chọn để gộp hiện nút Gộp', (
+    WidgetTester tester,
+  ) async {
     await _pump(tester);
-    await tester.tap(find.text('Chọn để gộp'));
+    await tester.tap(find.text('Select to merge'));
     await tester.pumpAndSettle();
-    expect(find.text('Gộp (0)'), findsOneWidget);
-    expect(find.text('Hủy chọn'), findsOneWidget);
+    expect(find.text('Merge (0)'), findsOneWidget);
+    expect(find.text('Cancel selection'), findsOneWidget);
   });
 }

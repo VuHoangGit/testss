@@ -35,10 +35,7 @@ const Map<String, String> _tabLabels = <String, String>{
 
 /// Thực thi và trả về câu phản hồi cuối (hiển thị + đọc bằng TTS).
 /// Mọi exception đã được bắt trong này — không ném ra ngoài.
-Future<String> executeVoiceAction(
-  Ref ref,
-  VoiceCommandResult decision,
-) async {
+Future<String> executeVoiceAction(Ref ref, VoiceCommandResult decision) async {
   final String? action = decision.action;
   if (action == null) {
     return decision.reply;
@@ -52,10 +49,10 @@ Future<String> executeVoiceAction(
       'open_document' => _openDocument(ref, _param(decision, 'name_query')),
       'run_ocr' => _runOcr(ref, _param(decision, 'name_query')),
       'ask_chat' => _askChat(
-          ref,
-          _param(decision, 'question'),
-          decision.params['name_query'] as String?,
-        ),
+        ref,
+        _param(decision, 'question'),
+        decision.params['name_query'] as String?,
+      ),
       'translate_text' => _translateText(ref, decision.params),
       'read_aloud' => _readAloud(ref, _param(decision, 'what')),
       'stop_speaking' => 'Đã dừng đọc.',
@@ -122,7 +119,9 @@ Future<String> _selectFolder(Ref ref, String folderName) async {
   }
   _popViewerIfOpen();
   ref.read(shellTabProvider.notifier).setTab(1); // tab Tài liệu
-  await ref.read(documentsControllerProvider.notifier).selectFolder(match.item!.id);
+  await ref
+      .read(documentsControllerProvider.notifier)
+      .selectFolder(match.item!.id);
   return 'Đã lọc theo thư mục "${match.item!.name}".';
 }
 
@@ -158,10 +157,12 @@ Future<DocumentItem?> _resolveDocument(
     case NameMatchStatus.unique:
       return Future<DocumentItem?>.value(match.item);
     case NameMatchStatus.ambiguous:
-      onAmbiguous(_askAgain(
-        'Tài liệu "$nameQuery"',
-        match.candidates.map((DocumentItem doc) => doc.name).toList(),
-      ));
+      onAmbiguous(
+        _askAgain(
+          'Tài liệu "$nameQuery"',
+          match.candidates.map((DocumentItem doc) => doc.name).toList(),
+        ),
+      );
     case NameMatchStatus.none:
       final String hint = match.candidates.isEmpty
           ? 'Danh sách tài liệu hiện trống hoặc không có file gần giống.'
@@ -182,13 +183,10 @@ String _askAgain(String title, List<String> candidates) {
   return '$title khớp nhiều lựa chọn: $list. Hãy nói lại kèm tên đủ chính xác.';
 }
 
-Future<String> _openDocument(
-  Ref ref,
-  String nameQuery,
-) async {
+Future<String> _openDocument(Ref ref, String nameQuery) async {
   late String feedback;
   final DocumentItem? doc = await _resolveDocument(
-          ref,
+    ref,
     nameQuery,
     onAmbiguous: (String message) => feedback = message,
   );
@@ -203,7 +201,7 @@ Future<String> _openDocument(
 Future<String> _runOcr(Ref ref, String nameQuery) async {
   late String feedback;
   final DocumentItem? doc = await _resolveDocument(
-          ref,
+    ref,
     nameQuery,
     onAmbiguous: (String message) => feedback = message,
   );
@@ -215,20 +213,18 @@ Future<String> _runOcr(Ref ref, String nameQuery) async {
   ref.read(aiToolProvider.notifier).setTool(0); // OCR
   ref.read(aiDocumentIdProvider.notifier).select(doc.id);
   final OcrResult result = await ref.read(aiRepositoryProvider).ocr(doc.id);
-  ref.read(lastAiResultsProvider.notifier).setOcr(result.text, result.keyValues);
+  ref
+      .read(lastAiResultsProvider.notifier)
+      .setOcr(result.text, result.keyValues);
   return 'Đã quét OCR "${doc.name}". Bạn có thể nói "đọc kết quả" để nghe nội dung.';
 }
 
-Future<String> _askChat(
-  Ref ref,
-  String question,
-  String? nameQuery,
-) async {
+Future<String> _askChat(Ref ref, String question, String? nameQuery) async {
   String? documentId = ref.read(aiDocumentIdProvider);
   if (nameQuery != null && nameQuery.isNotEmpty) {
     late String feedback;
     final DocumentItem? doc = await _resolveDocument(
-          ref,
+      ref,
       nameQuery,
       onAmbiguous: (String message) => feedback = message,
     );
@@ -244,10 +240,13 @@ Future<String> _askChat(
   }
   ref.read(shellTabProvider.notifier).setTab(2);
   ref.read(aiToolProvider.notifier).setTool(1); // Chat
-  final ChatMessagesController messages = ref.read(chatMessagesProvider.notifier);
+  final ChatMessagesController messages = ref.read(
+    chatMessagesProvider.notifier,
+  );
   messages.add(question, fromUser: true);
   try {
-    final String answer = await ref.read(aiRepositoryProvider)
+    final String answer = await ref
+        .read(aiRepositoryProvider)
         .chat(question, documentIds: <String>[documentId]);
     messages.add(answer, fromUser: false);
     ref.read(lastAiResultsProvider.notifier).setChat(question, answer);
@@ -258,18 +257,17 @@ Future<String> _askChat(
   }
 }
 
-Future<String> _translateText(
-  Ref ref,
-  Map<String, dynamic> params,
-) async {
+Future<String> _translateText(Ref ref, Map<String, dynamic> params) async {
   final String text = params['text']?.toString() ?? '';
   if (text.isEmpty) {
     return 'Chưa có nội dung để dịch.';
   }
-  final String targetLanguage = params['target_language']?.toString() ?? 'English';
+  final String targetLanguage =
+      params['target_language']?.toString() ?? 'English';
   ref.read(shellTabProvider.notifier).setTab(2);
   ref.read(aiToolProvider.notifier).setTool(2); // Dịch
-  final String translation = await ref.read(aiRepositoryProvider)
+  final String translation = await ref
+      .read(aiRepositoryProvider)
       .translate(text, targetLanguage: targetLanguage);
   ref.read(lastAiResultsProvider.notifier).setTranslation(text, translation);
   return translation;
@@ -281,17 +279,18 @@ Future<String> _readAloud(Ref ref, String what) async {
     'ocr_result' => last.ocrText ?? 'Chưa có kết quả OCR nào.',
     'chat_answer' => last.chatAnswer ?? 'Chưa có câu trả lời AI nào.',
     'translation' => last.translation ?? 'Chưa có bản dịch nào.',
-    _ => last.chatAnswer ?? last.translation ?? last.ocrText ?? 'Chưa có nội dung nào để đọc.',
+    _ =>
+      last.chatAnswer ??
+          last.translation ??
+          last.ocrText ??
+          'Chưa có nội dung nào để đọc.',
   };
 }
 
-Future<String> _deleteDocument(
-  Ref ref,
-  String nameQuery,
-) async {
+Future<String> _deleteDocument(Ref ref, String nameQuery) async {
   late String feedback;
   final DocumentItem? doc = await _resolveDocument(
-          ref,
+    ref,
     nameQuery,
     onAmbiguous: (String message) => feedback = message,
   );
@@ -330,22 +329,20 @@ Future<String> _deleteDocument(
   return 'Đã xóa "${doc.name}".';
 }
 
-Future<String> _mergeDocuments(
-  Ref ref,
-  Map<String, dynamic> params,
-) async {
-  final DocumentsController notifier = ref.read(documentsControllerProvider.notifier);
-  final List<String> names =
-      (params['names'] as List<dynamic>? ?? <dynamic>[])
-          .map((dynamic name) => name.toString())
-          .where((String name) => name.isNotEmpty)
-          .toList();
+Future<String> _mergeDocuments(Ref ref, Map<String, dynamic> params) async {
+  final DocumentsController notifier = ref.read(
+    documentsControllerProvider.notifier,
+  );
+  final List<String> names = (params['names'] as List<dynamic>? ?? <dynamic>[])
+      .map((dynamic name) => name.toString())
+      .where((String name) => name.isNotEmpty)
+      .toList();
   List<String> documentIds = <String>[];
   if (names.isNotEmpty) {
     for (final String name in names) {
       late String feedback;
       final DocumentItem? doc = await _resolveDocument(
-          ref,
+        ref,
         name,
         onAmbiguous: (String message) => feedback = message,
       );
@@ -377,13 +374,10 @@ Future<String> _mergeDocuments(
   return 'Đã tạo file gộp "$newName".';
 }
 
-Future<String> _splitDocument(
-  Ref ref,
-  Map<String, dynamic> params,
-) async {
+Future<String> _splitDocument(Ref ref, Map<String, dynamic> params) async {
   late String feedback;
   final DocumentItem? doc = await _resolveDocument(
-          ref,
+    ref,
     params['name_query']?.toString() ?? '',
     onAmbiguous: (String message) => feedback = message,
   );
@@ -399,7 +393,8 @@ Future<String> _splitDocument(
   if (ranges == null || ranges.isEmpty) {
     return 'Đã hủy lệnh tách.';
   }
-  final List<String> parts = await ref.read(documentsControllerProvider.notifier)
+  final List<String> parts = await ref
+      .read(documentsControllerProvider.notifier)
       .splitDocument(doc.id, ranges: ranges);
   ref.read(shellTabProvider.notifier).setTab(1);
   return 'Đã tạo ${parts.length} file: ${parts.join(', ')}.';
@@ -412,8 +407,9 @@ Future<String?> _promptText(
 }) async {
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) return null;
-  final TextEditingController controller =
-      TextEditingController(text: initial ?? '');
+  final TextEditingController controller = TextEditingController(
+    text: initial ?? '',
+  );
   final String? result = await showDialog<String>(
     context: context,
     builder: (BuildContext ctx) => AlertDialog(

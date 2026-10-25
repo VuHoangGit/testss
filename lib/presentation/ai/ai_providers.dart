@@ -67,10 +67,8 @@ class LastAiResultsController extends Notifier<LastAiResults> {
   void setOcr(String text, Map<String, String> keyValues) =>
       state = LastAiResults(ocrText: text, ocrKeyValues: keyValues);
 
-  void setChat(String question, String answer) => state = LastAiResults(
-        chatQuestion: question,
-        chatAnswer: answer,
-      );
+  void setChat(String question, String answer) =>
+      state = LastAiResults(chatQuestion: question, chatAnswer: answer);
 
   void setTranslation(String source, String translation) =>
       state = LastAiResults(sourceText: source, translation: translation);
@@ -93,21 +91,21 @@ chatMessagesProvider =
 class ChatMessagesController extends Notifier<List<ChatMessage>> {
   @override
   List<ChatMessage> build() => <ChatMessage>[
-        const ChatMessage(
-          text:
-              'Hello! Select a document and ask a question. I will answer based on its content.',
-          fromUser: false,
-        ),
-      ];
+    const ChatMessage(
+      text: 'Hello! Select a document and ask a question. I will answer based on its content.',
+      fromUser: false,
+    ),
+  ];
 
-  void add(String text, {required bool fromUser}) =>
-      state = <ChatMessage>[...state, ChatMessage(text: text, fromUser: fromUser)];
+  void add(String text, {required bool fromUser}) => state = <ChatMessage>[
+    ...state,
+    ChatMessage(text: text, fromUser: fromUser),
+  ];
 
   void clear() => state = <ChatMessage>[
-        const ChatMessage(
-          text:
-              'Hello! Select a document and ask a question. I will answer based on its content.',
-          fromUser: false,
-        ),
-      ];
+    const ChatMessage(
+      text: 'Hello! Select a document and ask a question. I will answer based on its content.',
+      fromUser: false,
+    ),
+  ];
 }

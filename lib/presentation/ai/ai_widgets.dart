@@ -76,10 +76,7 @@ class AiPageHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        CircleAvatar(
-          radius: 22,
-          child: Icon(icon),
-        ),
+        CircleAvatar(radius: 22, child: Icon(icon)),
         const SizedBox(width: 12),
         Expanded(
           child: Column(

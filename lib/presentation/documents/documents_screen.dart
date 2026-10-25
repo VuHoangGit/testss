@@ -125,9 +125,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                 LinearProgressIndicator(value: v <= 0 ? null : v),
                 const SizedBox(height: 8),
                 Text(
-                  v <= 0
-                      ? 'Preparing…'
-                      : '${(v * 100).toStringAsFixed(0)}%',
+                  v <= 0 ? 'Preparing…' : '${(v * 100).toStringAsFixed(0)}%',
                 ),
               ],
             ),

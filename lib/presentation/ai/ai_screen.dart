@@ -13,7 +13,11 @@ class AiScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final int index = ref.watch(aiToolProvider);
     const List<(String, String, IconData)> tools = <(String, String, IconData)>[
-      ('OCR & Word', 'Extract text and export', Icons.document_scanner_outlined),
+      (
+        'OCR & Word',
+        'Extract text and export',
+        Icons.document_scanner_outlined,
+      ),
       ('AI Chat', 'Ask questions about files', Icons.forum_outlined),
       ('Translate', 'Translate selected text', Icons.translate_outlined),
     ];
@@ -30,9 +34,8 @@ class AiScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
           child: Text(
             'AI Center',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(context).textTheme.headlineSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
         Padding(
@@ -67,18 +70,30 @@ class AiScreen extends ConsumerWidget {
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: <Widget>[
-                          Icon(icon, color: selected
-                              ? Theme.of(context).colorScheme.primary
-                              : null),
+                          Icon(
+                            icon,
+                            color: selected
+                                ? Theme.of(context).colorScheme.primary
+                                : null,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: <Widget>[
-                                Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                Text(
+                                  title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                                 const SizedBox(height: 3),
-                                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ],
                             ),
                           ),

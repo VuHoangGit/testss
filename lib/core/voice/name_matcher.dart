@@ -28,10 +28,13 @@ String removeVietnameseDiacritics(String input) {
 /// Chuẩn hóa để so khớp: bỏ dấu, chữ thường, bỏ đuôi file, mọi dấu phân cách
 /// (gạch nối/gạch dưới…) thành một khoảng trắng.
 String normalizeName(String input) {
-  final String noDiacritics =
-      removeVietnameseDiacritics(input).toLowerCase().trim();
-  final String withoutExtension =
-      noDiacritics.replaceFirst(RegExp(r'\.[a-z0-9]{1,6}$'), '');
+  final String noDiacritics = removeVietnameseDiacritics(input)
+      .toLowerCase()
+      .trim();
+  final String withoutExtension = noDiacritics.replaceFirst(
+    RegExp(r'\.[a-z0-9]{1,6}$'),
+    '',
+  );
   return withoutExtension
       .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
@@ -41,7 +44,11 @@ String normalizeName(String input) {
 enum NameMatchStatus { unique, ambiguous, none }
 
 class NameMatch<T> {
-  const NameMatch({required this.status, this.item, this.candidates = const []});
+  const NameMatch({
+    required this.status,
+    this.item,
+    this.candidates = const [],
+  });
 
   final NameMatchStatus status;
 
@@ -60,7 +67,10 @@ NameMatch<T> matchByName<T>({
 }) {
   final String q = normalizeName(query);
   if (q.isEmpty) {
-    return NameMatch<T>(status: NameMatchStatus.none, candidates: items.toList());
+    return NameMatch<T>(
+      status: NameMatchStatus.none,
+      candidates: items.toList(),
+    );
   }
 
   final Map<T, String> normalized = <T, String>{
@@ -88,7 +98,10 @@ NameMatch<T> matchByName<T>({
     return NameMatch<T>(status: NameMatchStatus.unique, item: contains.first);
   }
   if (contains.length > 1) {
-    return NameMatch<T>(status: NameMatchStatus.ambiguous, candidates: contains);
+    return NameMatch<T>(
+      status: NameMatchStatus.ambiguous,
+      candidates: contains,
+    );
   }
 
   // 3) Không khớp — gợi ý theo từ khóa chung (từ ≥ 3 ký tự, bỏ "pdf"...).
@@ -101,6 +114,6 @@ NameMatch<T> matchByName<T>({
 }
 
 Set<String> _tokens(String normalized) => <String>{
-      for (final String token in normalized.split(RegExp(r'[^a-z0-9]+')))
-        if (token.length >= 3 && token != 'pdf' && token != 'docx') token,
-    };
+  for (final String token in normalized.split(RegExp(r'[^a-z0-9]+')))
+    if (token.length >= 3 && token != 'pdf' && token != 'docx') token,
+};

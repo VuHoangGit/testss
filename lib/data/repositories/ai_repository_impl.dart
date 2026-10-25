@@ -50,7 +50,10 @@ class AiRepositoryImpl implements AiRepository {
       );
       return (response.data as Map<String, dynamic>)['text'] as String;
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không đọc được nội dung tài liệu');
+      throw mapDioException(
+        error,
+        fallback: 'Không đọc được nội dung tài liệu',
+      );
     }
   }
 
@@ -127,14 +130,18 @@ class AiRepositoryImpl implements AiRepository {
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
       return VoiceCommandResult(
         action: data['action'] as String?,
-        params: (data['params'] as Map<dynamic, dynamic>?)?.map(
-              (dynamic key, dynamic value) =>
-                  MapEntry(key.toString(), value),
-            ) ?? <String, dynamic>{},
+        params:
+            (data['params'] as Map<dynamic, dynamic>?)?.map(
+              (dynamic key, dynamic value) => MapEntry(key.toString(), value),
+            ) ??
+            <String, dynamic>{},
         reply: data['reply'] as String,
       );
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không phân tích được lệnh giọng nói');
+      throw mapDioException(
+        error,
+        fallback: 'Không phân tích được lệnh giọng nói',
+      );
     }
   }
 }

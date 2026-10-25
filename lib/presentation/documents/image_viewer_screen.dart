@@ -19,18 +19,12 @@ class ImageViewerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          fileName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       backgroundColor: Colors.black,
       body: InteractiveViewer(
         maxScale: 8,
-        child: Center(
-          child: Image.memory(bytes, fit: BoxFit.contain),
-        ),
+        child: Center(child: Image.memory(bytes, fit: BoxFit.contain)),
       ),
     );
   }

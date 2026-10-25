@@ -12,19 +12,19 @@ import '../domain/entities/user.dart';
 import '../domain/repositories/auth_repository.dart';
 import 'auth/auth_controller.dart';
 
-final Provider<TokenStorage> tokenStorageProvider =
-    Provider<TokenStorage>((Ref ref) => SecureTokenStorage());
+final Provider<TokenStorage> tokenStorageProvider = Provider<TokenStorage>(
+  (Ref ref) => SecureTokenStorage(),
+);
 
-final Provider<Dio> plainDioProvider =
-    Provider<Dio>((Ref ref) => buildDio());
+final Provider<Dio> plainDioProvider = Provider<Dio>((Ref ref) => buildDio());
 
 final Provider<AuthRepository> authRepositoryProvider =
     Provider<AuthRepository>(
-  (Ref ref) => AuthRepositoryImpl(
-    dio: ref.watch(plainDioProvider),
-    storage: ref.watch(tokenStorageProvider),
-  ),
-);
+      (Ref ref) => AuthRepositoryImpl(
+        dio: ref.watch(plainDioProvider),
+        storage: ref.watch(tokenStorageProvider),
+      ),
+    );
 
 /// Dio cho API nghiệp vụ: tự gắn token + single-flight refresh khi 401.
 final Provider<Dio> apiDioProvider = Provider<Dio>((Ref ref) {
@@ -43,5 +43,6 @@ final Provider<Dio> apiDioProvider = Provider<Dio>((Ref ref) {
 });
 
 final AsyncNotifierProvider<AuthController, AuthSession?>
-    authControllerProvider =
-    AsyncNotifierProvider<AuthController, AuthSession?>(AuthController.new);
+authControllerProvider = AsyncNotifierProvider<AuthController, AuthSession?>(
+  AuthController.new,
+);

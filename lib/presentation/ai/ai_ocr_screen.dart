@@ -26,7 +26,8 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
       await action();
     } on Exception catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -37,7 +38,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
   Widget build(BuildContext context) {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
-            const <DocumentItem>[];
+        const <DocumentItem>[];
     final String? documentId = ref.watch(aiDocumentIdProvider);
     final LastAiResults last = ref.watch(lastAiResultsProvider);
     final AiRepository ai = ref.read(aiRepositoryProvider);
@@ -56,7 +57,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
           onChanged: _busy
               ? null
               : (String? value) =>
-                  ref.read(aiDocumentIdProvider.notifier).select(value),
+                    ref.read(aiDocumentIdProvider.notifier).select(value),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -83,8 +84,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
                       await const FileSaver().saveBytes(
                         fileName: 'ocr-result.docx',
                         bytes: bytes,
-                        mimeType:
-                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                       );
                     }),
               icon: const Icon(Icons.download_outlined),
@@ -92,18 +92,23 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
             ),
           ],
         ),
-        if (_busy) const Padding(
-          padding: EdgeInsets.only(top: 20),
-          child: LinearProgressIndicator(),
-        ),
+        if (_busy)
+          const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: LinearProgressIndicator(),
+          ),
         if (last.ocrKeyValues.isNotEmpty) ...<Widget>[
           const SizedBox(height: 24),
-          Text('Extracted fields', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Extracted fields',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: <Widget>[
-                for (final MapEntry<String, String> entry in last.ocrKeyValues.entries)
+                for (final MapEntry<String, String> entry
+                    in last.ocrKeyValues.entries)
                   ListTile(title: Text(entry.key), subtitle: Text(entry.value)),
               ],
             ),
@@ -113,7 +118,12 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
           const SizedBox(height: 16),
           Text('OCR text', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
-          Card(child: Padding(padding: const EdgeInsets.all(16), child: SelectableText(last.ocrText!))),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(last.ocrText!),
+            ),
+          ),
         ],
       ],
     );

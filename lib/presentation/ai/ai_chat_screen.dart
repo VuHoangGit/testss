@@ -32,14 +32,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     if (_busy || question.isEmpty || documentId == null) return;
     _question.clear();
     setState(() => _busy = true);
-    final ChatMessagesController messages =
-        ref.read(chatMessagesProvider.notifier);
+    final ChatMessagesController messages = ref.read(
+      chatMessagesProvider.notifier,
+    );
     messages.add(question, fromUser: true);
     _scrollToBottom();
     try {
       final AiRepository ai = ref.read(aiRepositoryProvider);
-      final String answer =
-          await ai.chat(question, documentIds: <String>[documentId]);
+      final String answer = await ai.chat(
+        question,
+        documentIds: <String>[documentId],
+      );
       messages.add(answer, fromUser: false);
       ref.read(lastAiResultsProvider.notifier).setChat(question, answer);
       _scrollToBottom();
@@ -66,7 +69,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   Widget build(BuildContext context) {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
-            const <DocumentItem>[];
+        const <DocumentItem>[];
     final List<ChatMessage> messages = ref.watch(chatMessagesProvider);
     final String? documentId = ref.watch(aiDocumentIdProvider);
     return Column(
@@ -77,7 +80,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             children: <Widget>[
               const AiPageHeader(
                 title: 'AI Chat',
-                subtitle: 'Ask intelligent questions about the selected document.',
+                subtitle:
+                    'Ask intelligent questions about the selected document.',
                 icon: Icons.forum_outlined,
               ),
               const SizedBox(height: 16),
@@ -87,7 +91,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                 onChanged: _busy
                     ? null
                     : (String? value) =>
-                        ref.read(aiDocumentIdProvider.notifier).select(value),
+                          ref.read(aiDocumentIdProvider.notifier).select(value),
               ),
             ],
           ),
@@ -99,10 +103,17 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             itemCount: messages.length + (_busy ? 1 : 0),
             itemBuilder: (BuildContext context, int index) {
               if (_busy && index == messages.length) {
-                return const _ChatBubble(text: 'AI is thinking...', fromUser: false, pending: true);
+                return const _ChatBubble(
+                  text: 'AI is thinking...',
+                  fromUser: false,
+                  pending: true,
+                );
               }
               final ChatMessage message = messages[index];
-              return _ChatBubble(text: message.text, fromUser: message.fromUser);
+              return _ChatBubble(
+                text: message.text,
+                fromUser: message.fromUser,
+              );
             },
           ),
         ),
@@ -125,9 +136,15 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
                       ? 'Select a document before asking...'
                       : 'Ask AI a question...',
                   border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
                   suffixIcon: IconButton(
-                    onPressed: _question.text.trim().isEmpty || documentId == null || _busy
+                    onPressed:
+                        _question.text.trim().isEmpty ||
+                            documentId == null ||
+                            _busy
                         ? null
                         : _send,
                     icon: const Icon(Icons.arrow_upward_rounded),
@@ -179,7 +196,10 @@ class _ChatBubble extends StatelessWidget {
                   SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: colors.primary),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.primary,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Text(text),
@@ -187,7 +207,9 @@ class _ChatBubble extends StatelessWidget {
               )
             : SelectableText(
                 text,
-                style: TextStyle(color: fromUser ? colors.onPrimary : colors.onSurface),
+                style: TextStyle(
+                  color: fromUser ? colors.onPrimary : colors.onSurface,
+                ),
               ),
       ),
     );

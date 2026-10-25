@@ -39,7 +39,8 @@ class AuthGate extends ConsumerWidget {
     final AsyncValue<AuthSession?> auth = ref.watch(authControllerProvider);
 
     return auth.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (Object e, StackTrace _) => Scaffold(
         body: Center(
           child: Column(

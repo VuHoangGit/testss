@@ -14,8 +14,9 @@ bool isAccessTokenUsable(
   try {
     final dynamic exp = JwtDecoder.decode(accessToken)['exp'];
     if (exp is! num) return false;
-    final DateTime expiresAt =
-        DateTime.fromMillisecondsSinceEpoch((exp * 1000).toInt());
+    final DateTime expiresAt = DateTime.fromMillisecondsSinceEpoch(
+      (exp * 1000).toInt(),
+    );
     final DateTime currentTime = now ?? DateTime.now();
     return currentTime.isBefore(expiresAt.subtract(leeway));
   } on FormatException {

@@ -7,18 +7,18 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData light() => _base(
-        ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.light,
-        ),
-      );
+    ColorScheme.fromSeed(
+      seedColor: const Color(0xFF6366F1),
+      brightness: Brightness.light,
+    ),
+  );
 
   static ThemeData dark() => _base(
-        ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
-          brightness: Brightness.dark,
-        ),
-      );
+    ColorScheme.fromSeed(
+      seedColor: const Color(0xFF6366F1),
+      brightness: Brightness.dark,
+    ),
+  );
 
   /// Component chung cho cả 2 chế độ — chỉ khác ColorScheme.
   static ThemeData _base(ColorScheme scheme) {
@@ -40,13 +40,17 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
