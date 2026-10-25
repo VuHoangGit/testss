@@ -7,7 +7,14 @@ from fastapi.responses import Response
 
 from app.api.deps import CurrentUser, DbSession
 from app.models.document import Document
-from app.schemas.ai import ChatRequest, ChatResult, OCRResult, TranslationRequest, TranslationResult
+from app.schemas.ai import (
+    ChatRequest,
+    ChatResult,
+    ExtractTextResult,
+    OCRResult,
+    TranslationRequest,
+    TranslationResult,
+)
 from app.schemas.voice import VoiceCommandRequest, VoiceCommandResponse
 from app.services import ai_service, storage_service, voice_command_service
 
@@ -52,11 +59,46 @@ def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Res
     )
 
 
+@router.get("/extract-text/{document_id}", response_model=ExtractTextResult)
+def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> ExtractTextResult:
+    """Trích nội dung văn bản của tài liệu để hiển thị/dịch vùng chọn.
+
+    Chạy cục bộ (pypdf/python-docx/decode), không tốn lượt gọi AI.
+    """
+    _, user = current
+    document = _owned_document(db, document_id, user.id)
+    if not ai_service.is_text_extractable(document.mime_type, document.original_name):
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Chưa hỗ trợ đọc loại file này "
+                "(hỗ trợ PDF, Word, txt/md và file văn bản)"
+            ),
+        )
+    try:
+        text = ai_service.extract_document_text(
+            storage_service.read_document_bytes(document.storage_key),
+            document.mime_type,
+            document.original_name,
+        )
+    except ai_service.AIServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail="Không trích được văn bản từ file (PDF scan? Hãy dùng OCR)",
+        )
+    return ExtractTextResult(text=text)
+
+
 @router.post("/translate", response_model=TranslationResult)
 def translate(body: TranslationRequest, current: CurrentUser) -> TranslationResult:
+    source = body.source_language or None
     try:
         return TranslationResult(
-            translation=ai_service.translate_selection(body.text, body.target_language)
+            translation=ai_service.translate_selection(
+                body.text, body.target_language, source_language=source
+            )
         )
     except ai_service.AIServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

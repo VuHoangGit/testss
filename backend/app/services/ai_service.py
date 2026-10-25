@@ -133,12 +133,20 @@ def extract_key_values(text: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in parsed.items()}
 
 
-def translate_selection(text: str, target_language: str) -> str:
+def translate_selection(
+    text: str, target_language: str, source_language: str | None = None
+) -> str:
+    source_hint = (
+        f" từ {source_language}" if source_language else ""
+    )
     return _request_anthropic(
         [
             {
                 "type": "text",
-                "text": f"Dịch chính xác sang {target_language}. Chỉ trả bản dịch:\n{text[:20000]}",
+                "text": (
+                    f"Dịch chính xác{source_hint} sang {target_language}. "
+                    f"Chỉ trả bản dịch:\n{text[:20000]}"
+                ),
             }
         ]
     ).strip()
@@ -164,3 +172,51 @@ def make_word_document(text: str) -> bytes:
     output = io.BytesIO()
     document.save(output)
     return output.getvalue()
+
+
+# Loại file đọc được bằng trích xuất text thuần (không cần AI).
+_TEXT_MIME_PREFIX = "text/"
+_DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+# Trình duyệt/một số client không nhận diện được đuôi lạ → dò theo tên file.
+_TEXT_EXTENSIONS = frozenset({
+    ".txt", ".md", ".markdown", ".csv", ".json", ".log", ".xml", ".yml", ".yaml",
+    ".py", ".js", ".ts", ".dart", ".java", ".c", ".cpp", ".html", ".css", ".ini",
+})
+
+
+def is_text_extractable(mime_type: str, name: str = "") -> bool:
+    """True nếu [extract_document_text] xử lý được loại file này."""
+    return (
+        mime_type in ("application/pdf", _DOCX_MIME)
+        or mime_type.startswith(_TEXT_MIME_PREFIX)
+        or name.lower().endswith(tuple(_TEXT_EXTENSIONS))
+    )
+
+
+def extract_document_text(data: bytes, mime_type: str, name: str = "") -> str:
+    """Trích văn bản thô từ tài liệu: PDF (pypdf), Word (python-docx),
+    các loại text (txt/md/csv/code...) — giải mã utf-8.
+
+    Trả "" nếu không trích được ký tự nào. Ném AIServiceError khi file mã hóa
+    hoặc định dạng không hỗ trợ (ảnh_scan cần dùng OCR riêng).
+    """
+    if not is_text_extractable(mime_type, name):
+        raise AIServiceError(
+            "Chưa hỗ trợ đọc loại file này (hỗ trợ PDF, Word, txt/md và file văn bản)"
+        )
+    if mime_type == "application/pdf":
+        return extract_pdf_text(data)
+    if mime_type == _DOCX_MIME:
+        try:
+            document = WordDocument(io.BytesIO(data))
+            return "\n\n".join(
+                paragraph.text for paragraph in document.paragraphs if paragraph.text
+            ).strip()
+        except AIServiceError:
+            raise
+        except Exception as exc:
+            raise AIServiceError("Không đọc được nội dung file Word") from exc
+    try:
+        return data.decode("utf-8", errors="replace").strip()
+    except Exception as exc:  # hiếm: decode với replace gần như không fail
+        raise AIServiceError("Không đọc được nội dung file văn bản") from exc
