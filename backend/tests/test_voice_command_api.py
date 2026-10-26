@@ -13,17 +13,12 @@ from app.schemas.voice import (
 from app.services.voice_command_service import VoiceCommandError
 
 
-def _login(client, monkeypatch, make_identity):
-    monkeypatch.setattr(
-        "app.api.v1.auth.verify_google_id_token",
-        lambda token: make_identity(),
-    )
-    response = client.post(
-        "/api/v1/auth/google",
-        json={"id_token": "fake-id-token-do-google-cap-duoi-dai-20-ky-tu"},
-    )
-    assert response.status_code == 200
-    return response.json()["access_token"]
+def _login(client, make_token):
+    token = make_token(sub="g-sub-1", email="user1@gmail.com", name="Nguyễn Văn A")
+    # Warm: request đầu tiên qua /auth/me để dependency resolve+commit user local
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    return token
 
 
 def _body(transcript="vào tab tài liệu", session_id="sess-00000001"):
@@ -50,8 +45,8 @@ def test_voice_command_requires_auth(client):
     assert response.status_code == 401
 
 
-def test_voice_command_returns_decision(client, monkeypatch, make_identity):
-    token = _login(client, monkeypatch, make_identity)
+def test_voice_command_returns_decision(client, monkeypatch, make_token):
+    token = _login(client, make_token)
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: VoiceCommandResponse(
@@ -71,8 +66,8 @@ def test_voice_command_returns_decision(client, monkeypatch, make_identity):
     }
 
 
-def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_identity):
-    token = _login(client, monkeypatch, make_identity)
+def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_token):
+    token = _login(client, make_token)
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: (_ for _ in ()).throw(
@@ -88,8 +83,8 @@ def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_identit
     assert "ANTHROPIC_AUTH_TOKEN" in response.json()["detail"]
 
 
-def test_voice_command_rejects_empty_transcript(client, monkeypatch, make_identity):
-    token = _login(client, monkeypatch, make_identity)
+def test_voice_command_rejects_empty_transcript(client, monkeypatch, make_token):
+    token = _login(client, make_token)
     response = client.post(
         "/api/v1/ai/voice-command",
         headers={"Authorization": f"Bearer {token}"},

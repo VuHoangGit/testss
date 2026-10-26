@@ -4,23 +4,18 @@ from app.models.document import Document
 from app.models.user import User
 
 
-def _login(client, monkeypatch, make_identity):
-    monkeypatch.setattr(
-        "app.api.v1.auth.verify_google_id_token",
-        lambda token: make_identity(),
-    )
-    response = client.post(
-        "/api/v1/auth/google",
-        json={"id_token": "fake-id-token-do-google-cap-du-dai-20-ky-tu"},
-    )
-    assert response.status_code == 200
-    return response.json()["access_token"]
+def _login(client, make_token):
+    token = make_token(sub="g-sub-1", email="user1@gmail.com", name="Nguyễn Văn A")
+    # Warm: request đầu tiên qua /auth/me để dependency resolve+commit user local
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    return token
 
 
 def test_chat_answers_using_owned_pdf(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     with db_session_factory() as db:
         user = db.query(User).one()
         document = Document(
@@ -60,9 +55,9 @@ def test_chat_answers_using_owned_pdf(
 
 
 def test_chat_rejects_pdf_without_extractable_text(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     with db_session_factory() as db:
         user = db.query(User).one()
         document = Document(
@@ -96,11 +91,11 @@ def test_chat_rejects_pdf_without_extractable_text(
 
 
 def test_chat_rejects_document_owned_by_another_user(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     with db_session_factory() as db:
-        other_user = User(google_sub="other", email="other@example.com")
+        other_user = User(supabase_id="other", email="other@example.com")
         db.add(other_user)
         db.flush()
         document = Document(
@@ -149,9 +144,9 @@ def test_extract_text_requires_auth(client):
 
 
 def test_extract_text_returns_pdf_text(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     document_id = _make_document(
         db_session_factory, name="hop-dong.pdf", mime_type="application/pdf"
     )
@@ -174,9 +169,9 @@ def test_extract_text_returns_pdf_text(
 
 
 def test_extract_text_decodes_markdown_file(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     document_id = _make_document(
         db_session_factory, name="srs.md", mime_type="text/markdown"
     )
@@ -195,9 +190,9 @@ def test_extract_text_decodes_markdown_file(
 
 
 def test_extract_text_unsupported_mime_returns_415(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     document_id = _make_document(
         db_session_factory, name="anh.png", mime_type="image/png"
     )
@@ -212,9 +207,9 @@ def test_extract_text_unsupported_mime_returns_415(
 
 
 def test_extract_text_empty_pdf_returns_422(
-    client, monkeypatch, make_identity, db_session_factory
+    client, monkeypatch, make_token, db_session_factory
 ):
-    token = _login(client, monkeypatch, make_identity)
+    token = _login(client, make_token)
     document_id = _make_document(
         db_session_factory, name="scan.pdf", mime_type="application/pdf"
     )
@@ -239,8 +234,8 @@ def test_extract_text_empty_pdf_returns_422(
 # POST /ai/translate — nhận thêm source_language
 
 
-def test_translate_forwards_source_language(client, monkeypatch, make_identity):
-    token = _login(client, monkeypatch, make_identity)
+def test_translate_forwards_source_language(client, monkeypatch, make_token):
+    token = _login(client, make_token)
     captured = {}
 
     def fake_translate(text, target_language, source_language=None):
@@ -266,8 +261,8 @@ def test_translate_forwards_source_language(client, monkeypatch, make_identity):
     assert captured["args"] == ("Xin chào", "English", "Vietnamese")
 
 
-def test_translate_defaults_source_to_auto(client, monkeypatch, make_identity):
-    token = _login(client, monkeypatch, make_identity)
+def test_translate_defaults_source_to_auto(client, monkeypatch, make_token):
+    token = _login(client, make_token)
     captured = {}
 
     def fake_translate(text, target_language, source_language=None):

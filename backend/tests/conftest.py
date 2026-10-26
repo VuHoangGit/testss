@@ -1,35 +1,98 @@
-"""Fixture test: env bắt buộc set TRƯỚC khi import app; DB = SQLite in-memory (StaticPool).
+"""Fixture test: env đặt TRƯỚC khi import app; DB = SQLite in-memory (StaticPool).
 
-Test suite chạy được mà không cần Postgres/Docker — chỉ test logic, không test driver.
+Test suite chạy được mà không cần Postgres/Supabase thật: access token Supabase
+được KÝ THẬT bằng cặp RSA sinh trong test, và JWKS client giả gắn vào cache
+của app.core.security — phần verify chạy đúng code production, chỉ bỏ mạng.
 """
 
 import os
 
-os.environ.setdefault("JWT_SECRET", "test-secret-key-dai-it-nhat-32-ky-tu-0123456789")
-os.environ.setdefault(
-    "GOOGLE_CLIENT_IDS",
-    "test-web-client-id.apps.googleusercontent.com,test-desktop-client-id.apps.googleusercontent.com",
-)
-os.environ.setdefault("ACCESS_TOKEN_MINUTES", "15")
-os.environ.setdefault("REFRESH_TOKEN_DAYS", "30")
+os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
 os.environ.setdefault("CORS_ORIGINS", "")
-# Test phải tất định: KHÔNG phụ thuộc .env của máy dev (dev có thể bật dev-login).
-# Ép (không setdefault) để test "dev login off by default" luôn đúng.
-os.environ["ALLOW_DEV_LOGIN"] = "false"
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401 — đăng ký model vào metadata
-from app.core.google import GoogleIdentity
+from app.core import security
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import create_app
+
+_TEST_SUPABASE_URL = "https://test-project.supabase.co"
+_TEST_ISSUER = f"{_TEST_SUPABASE_URL}/auth/v1"
+
+
+class _FakeJWKClient:
+    """Thay PyJWKClient: luôn trả signing key của test, không gọi mạng."""
+
+    def __init__(self, key: jwt.PyJWK) -> None:
+        self._key = key
+
+    def get_signing_key_from_jwt(self, token: str) -> jwt.PyJWK:
+        return self._key
+
+
+@pytest.fixture(scope="session")
+def _signing_key():
+    """Cặp RSA 1 lần cho cả suite; gắn client giả vào cache JWKS của security."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_jwk = jwt.algorithms.RSAAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
+    security._jwk_clients[_TEST_SUPABASE_URL] = _FakeJWKClient(
+        jwt.PyJWK(public_jwk, algorithm="RS256")
+    )
+    return private_pem
+
+
+@pytest.fixture()
+def make_token(_signing_key) -> Callable[..., str]:
+    """Factory sinh access token Supabase giả (chữ ký RSA thật của test)."""
+
+    def _make(
+        sub: str = "sub-1",
+        email: str = "user1@example.com",
+        *,
+        email_verified: bool = True,
+        name: str | None = None,
+        avatar_url: str | None = None,
+        expires_in_seconds: int = 3600,
+        issuer: str = _TEST_ISSUER,
+        audience: str = "authenticated",
+    ) -> str:
+        now = datetime.now(UTC)
+        metadata: dict[str, Any] = {}
+        if name is not None:
+            metadata["full_name"] = name
+        if avatar_url is not None:
+            metadata["avatar_url"] = avatar_url
+        payload = {
+            "sub": sub,
+            "iss": issuer,
+            "aud": audience,
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
+            "email": email,
+            "email_verified": email_verified,
+            "user_metadata": metadata,
+        }
+        return jwt.encode(payload, _signing_key, algorithm="RS256")
+
+    return _make
 
 
 @pytest.fixture()
@@ -51,7 +114,7 @@ def db_session_factory(db_engine) -> sessionmaker[Session]:
 
 
 @pytest.fixture()
-def client(db_session_factory) -> Iterator[TestClient]:
+def client(db_session_factory, _signing_key) -> Iterator[TestClient]:
     app = create_app()
 
     def override_get_db() -> Iterator[Session]:
@@ -64,20 +127,3 @@ def client(db_session_factory) -> Iterator[TestClient]:
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
-
-
-@pytest.fixture()
-def make_identity() -> Callable[..., GoogleIdentity]:
-    """Factory tạo GoogleIdentity giả — đã 'qua' bước verify Google."""
-
-    def _make(
-        google_sub: str = "g-sub-1",
-        email: str = "user1@gmail.com",
-        name: str | None = "Nguyễn Văn A",
-        avatar_url: str | None = "https://lh3.googleusercontent.com/a.jpg",
-    ) -> GoogleIdentity:
-        return GoogleIdentity(
-            google_sub=google_sub, email=email, name=name, avatar_url=avatar_url
-        )
-
-    return _make

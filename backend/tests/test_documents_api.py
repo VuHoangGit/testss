@@ -1,4 +1,4 @@
-"""Test API folders/documents + PDF tools (Sprint 2). Đăng nhập qua dev-login."""
+"""Test API folders/documents + PDF tools (Sprint 2). Đăng nhập bằng token Supabase giả."""
 
 import io
 
@@ -18,21 +18,16 @@ def make_pdf(pages: int) -> bytes:
 
 
 @pytest.fixture()
-def auth_headers(client, monkeypatch):
-    """Bật dev-login + đăng nhập user chính, trả Authorization headers."""
-    monkeypatch.setattr(get_settings(), "allow_dev_login", True)
-    resp = client.post("/api/v1/auth/dev", json={"email": "owner@gmail.com", "name": "Owner"})
-    assert resp.status_code == 200, resp.text
-    token = resp.json()["access_token"]
+def auth_headers(make_token):
+    """Token user chính — user local tự sinh ở request đầu (resolve theo sub)."""
+    token = make_token(sub="sub-owner", email="owner@gmail.com", name="Owner")
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture()
-def other_headers(client, monkeypatch):
+def other_headers(make_token):
     """User thứ 2 để test phân quyền (isolation giữa owner)."""
-    resp = client.post("/api/v1/auth/dev", json={"email": "other@gmail.com", "name": "Other"})
-    assert resp.status_code == 200, resp.text
-    token = resp.json()["access_token"]
+    token = make_token(sub="sub-other", email="other@gmail.com", name="Other")
     return {"Authorization": f"Bearer {token}"}
 
 

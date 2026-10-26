@@ -15,7 +15,7 @@ router = APIRouter(prefix="/folders", tags=["folders"])
 
 @router.get("", response_model=list[FolderOut])
 def list_folders(db: DbSession, current: CurrentUser) -> list[FolderOut]:
-    _, user = current
+    user = current
     rows = db.execute(
         select(Folder, func.count(Document.id).label("document_count"))
         .outerjoin(Document, Document.folder_id == Folder.id)
@@ -28,7 +28,7 @@ def list_folders(db: DbSession, current: CurrentUser) -> list[FolderOut]:
 
 @router.post("", response_model=FolderOut, status_code=201)
 def create_folder(body: FolderCreate, db: DbSession, current: CurrentUser) -> FolderOut:
-    _, user = current
+    user = current
     folder = Folder(owner_id=user.id, name=body.name.strip())
     db.add(folder)
     db.commit()
@@ -39,7 +39,7 @@ def create_folder(body: FolderCreate, db: DbSession, current: CurrentUser) -> Fo
 def delete_folder(
     folder_id: uuid.UUID, db: DbSession, current: CurrentUser
 ) -> dict[str, str]:
-    _, user = current
+    user = current
     folder = db.get(Folder, folder_id)
     if folder is None or folder.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Không tìm thấy thư mục")

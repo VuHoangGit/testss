@@ -30,7 +30,7 @@ def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
 
 @router.post("/ocr/{document_id}", response_model=OCRResult)
 def ocr(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> OCRResult:
-    _, user = current
+    user = current
     document = _owned_document(db, document_id, user.id)
     try:
         text = ai_service.ocr_document(
@@ -43,7 +43,7 @@ def ocr(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> OCRResul
 
 @router.post("/ocr/{document_id}/word")
 def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Response:
-    _, user = current
+    user = current
     document = _owned_document(db, document_id, user.id)
     try:
         text = ai_service.ocr_document(
@@ -65,7 +65,7 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
 
     Chạy cục bộ (pypdf/python-docx/decode), không tốn lượt gọi AI.
     """
-    _, user = current
+    user = current
     document = _owned_document(db, document_id, user.id)
     if not ai_service.is_text_extractable(document.mime_type, document.original_name):
         raise HTTPException(
@@ -106,7 +106,7 @@ def translate(body: TranslationRequest, current: CurrentUser) -> TranslationResu
 
 @router.post("/chat", response_model=ChatResult)
 def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
-    _, user = current
+    user = current
     try:
         ids = [uuid.UUID(value) for value in body.document_ids]
     except ValueError as exc:

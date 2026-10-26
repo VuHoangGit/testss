@@ -1,7 +1,7 @@
 """Cấu hình ứng dụng đọc từ biến môi trường / file .env.
 
-Không hardcode secret: JWT_SECRET và GOOGLE_CLIENT_IDS là bắt buộc,
-thiếu thì app từ chối khởi động (fail fast).
+Đăng nhập do Supabase Auth quản lý: SUPABASE_URL là bắt buộc, thiếu thì app
+từ chối khởi động (fail fast). Anon key chỉ nằm phía client, backend không cần.
 """
 
 from functools import lru_cache
@@ -18,21 +18,13 @@ class Settings(BaseSettings):
     # SQLAlchemy 2.0 + psycopg3 (sync). Dev không có Docker có thể dùng sqlite:///...
     database_url: str = "postgresql+psycopg://docuvault:docuvault@localhost:5432/docuvault"
 
-    # JWT
-    jwt_secret: str
-    jwt_algorithm: str = "HS256"
-    jwt_issuer: str = "docuvault"
-    access_token_minutes: int = 15
-    refresh_token_days: int = 30
-
-    # Danh sách OAuth client ID của Google, phân cách bằng dấu phẩy
-    google_client_ids: str
-    # Rỗng = mở cho mọi account Google (EC-35)
+    # Supabase Auth: URL project (vd https://abcdef.supabase.co).
+    # Backend verify access token qua JWKS của project này.
+    supabase_url: str
+    # Rỗng = mở cho mọi account (EC-35)
     allowed_email_domains: str = ""
     # Origin được phép gọi API (CORS), phân cách bằng dấu phẩy; rỗng = tắt
     cors_origins: str = ""
-    # Bật POST /auth/dev (đăng nhập nhanh không cần Google) — CHỈ cho dev/demo
-    allow_dev_login: bool = False
     # Thư mục chứa file tài liệu upload (Sprint 2). Rỗng = backend/storage/documents
     documents_dir: str = ""
     # Giới hạn dung lượng 1 file upload (MB)
@@ -45,8 +37,14 @@ class Settings(BaseSettings):
     anthropic_timeout_seconds: int = 90
 
     @property
-    def google_client_id_list(self) -> list[str]:
-        return [x.strip() for x in self.google_client_ids.split(",") if x.strip()]
+    def supabase_issuer(self) -> str:
+        """Giá trị `iss` trong access token do Supabase cấp."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        """Endpoint JWKS dùng verify chữ ký token."""
+        return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
 
     @property
     def allowed_email_domain_list(self) -> list[str]:

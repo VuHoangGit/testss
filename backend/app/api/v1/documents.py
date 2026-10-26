@@ -67,7 +67,7 @@ def list_documents(
     folder_id: uuid.UUID | None = None,
 ) -> list[DocumentOut]:
     """Danh sách tài liệu của user; truy vấn `folder_id` để lọc theo thư mục."""
-    _, user = current
+    user = current
     stmt = select(Document).where(Document.owner_id == user.id)
     if folder_id is not None:
         stmt = stmt.where(Document.folder_id == folder_id)
@@ -82,7 +82,7 @@ async def upload_document(
     folder_id: uuid.UUID | None = Form(default=None),  # noqa: B008 — idiom FastAPI
 ) -> DocumentOut:
     """Upload 1 file; nếu là PDF thì ghi thêm số trang để UI hiển thị."""
-    _, user = current
+    user = current
 
     if folder_id is not None:
         folder = db.get(Folder, folder_id)
@@ -123,7 +123,7 @@ def download_document(
     document_id: uuid.UUID, db: DbSession, current: CurrentUser
 ) -> FileResponse:
     """Tải file gốc về máy."""
-    _, user = current
+    user = current
     doc = _get_owned_document(db, document_id, user.id)
     try:
         path = storage_service.document_path(doc.storage_key)
@@ -138,7 +138,7 @@ def download_document(
 def delete_document(
     document_id: uuid.UUID, db: DbSession, current: CurrentUser
 ) -> dict[str, str]:
-    _, user = current
+    user = current
     doc = _get_owned_document(db, document_id, user.id)
     storage_service.delete_document_file(doc.storage_key)
     db.delete(doc)
@@ -149,7 +149,7 @@ def delete_document(
 @router.post("/merge", response_model=DocumentOut, status_code=201)
 def merge_documents(body: MergeRequest, db: DbSession, current: CurrentUser) -> DocumentOut:
     """Gộp nhiều PDF thành 1 tài liệu mới (không hủy bản gốc)."""
-    _, user = current
+    user = current
     docs = [_get_owned_document(db, document_id, user.id) for document_id in body.document_ids]
     parts = []
     for doc in docs:
@@ -174,7 +174,7 @@ def split_document(
     document_id: uuid.UUID, body: SplitRequest, db: DbSession, current: CurrentUser
 ) -> list[DocumentOut]:
     """Tách trang: mỗi phạm vi (vd "1-3,5") tạo 1 tài liệu PDF mới."""
-    _, user = current
+    user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ tách file PDF")
@@ -208,7 +208,7 @@ def protect_document(
     document_id: uuid.UUID, body: ProtectRequest, db: DbSession, current: CurrentUser
 ) -> DocumentOut:
     """Tạo bản sao đã đặt mật khẩu (bản gốc giữ nguyên)."""
-    _, user = current
+    user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file PDF")
@@ -235,7 +235,7 @@ def unprotect_document(
     document_id: uuid.UUID, body: UnprotectRequest, db: DbSession, current: CurrentUser
 ) -> DocumentOut:
     """Tạo bản sao đã gỡ mật khẩu (cần mật khẩu hiện tại)."""
-    _, user = current
+    user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
         raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file PDF")

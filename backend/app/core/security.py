@@ -1,16 +1,15 @@
-"""Sinh/xác minh JWT access token, sinh và hash refresh token.
+"""Xác minh access token do Supabase Auth cấp.
 
-- Access token: JWT HS256, claim `sub` (user id), `sid` (session id), thời hạn ngắn.
-- Refresh token: chuỗi ngẫu nhiên 256-bit; DB CHỈ lưu SHA-256 hex, không bao giờ plaintext.
+Token là JWT ký bất đối xứng (RS256/ES256); public key lấy từ endpoint JWKS
+của project Supabase. PyJWKClient tự cache key và tự fetch lại khi `kid`
+xoay — KHÔNG tự cache vĩnh viễn bằng cách khác. Không verify token tự ký
+nữa: toàn bộ đăng nhập (Google + email/password) do Supabase quản lý.
 """
 
-import hashlib
-import secrets
-import uuid
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+from jwt import PyJWKClient
 
 from app.core.config import Settings, get_settings
 
@@ -23,64 +22,34 @@ class AuthError(Exception):
         super().__init__(message)
 
 
-def create_access_token(
-    user_id: uuid.UUID,
-    session_id: uuid.UUID,
-    *,
-    email: str | None = None,
-    name: str | None = None,
-    picture: str | None = None,
-    settings: Settings | None = None,
-    now: datetime | None = None,
-) -> str:
-    """Cấp access JWT cho 1 session. `now` chỉ dùng trong test.
+# Cache client theo URL project — tránh tạo lại HTTP client mỗi request
+_jwk_clients: dict[str, PyJWKClient] = {}
 
-    Nhúng thêm email/name/picture để client khôi phục phiên offline mà không
-    cần gọi /auth/me (luồng L3 — mở app vào thẳng Shell).
+
+def verify_supabase_token(token: str, *, settings: Settings | None = None) -> dict[str, Any]:
+    """Verify chữ ký/issuer/audience/hạn của access token Supabase.
+
+    - Sai chữ ký, sai `iss` (token từ project khác), sai `aud`, hết hạn → AuthError.
+    - Không nối được JWKS (Supabase sự cố) → AuthError với message phân biệt.
+    - Chỉ nhận chữ ký bất đối xứng từ JWKS → chặn alg confusion (HS256/none).
     """
     s = settings or get_settings()
-    now_dt = now or datetime.now(UTC)
-    payload: dict[str, Any] = {
-        "sub": str(user_id),
-        "sid": str(session_id),
-        "type": "access",
-        "iss": s.jwt_issuer,
-        "iat": int(now_dt.timestamp()),
-        "exp": int((now_dt + timedelta(minutes=s.access_token_minutes)).timestamp()),
-    }
-    if email is not None:
-        payload["email"] = email
-    if name is not None:
-        payload["name"] = name
-    if picture is not None:
-        payload["picture"] = picture
-    return jwt.encode(payload, s.jwt_secret, algorithm=s.jwt_algorithm)
-
-
-def decode_access_token(token: str, *, settings: Settings | None = None) -> dict[str, Any]:
-    """Decode + verify chữ ký/issuer/hạn. Sai bất kỳ → AuthError (EC-34)."""
-    s = settings or get_settings()
+    client = _jwk_clients.get(s.supabase_url)
+    if client is None:
+        client = PyJWKClient(s.supabase_jwks_url, cache_keys=True)
+        _jwk_clients[s.supabase_url] = client
     try:
-        payload = jwt.decode(
+        signing_key = client.get_signing_key_from_jwt(token)
+        payload: dict[str, Any] = jwt.decode(
             token,
-            s.jwt_secret,
-            algorithms=[s.jwt_algorithm],
-            issuer=s.jwt_issuer,
+            signing_key.key,
+            algorithms=["RS256", "ES256"],
+            issuer=s.supabase_issuer,
+            audience="authenticated",
+            options={"require": ["exp", "iss", "sub"]},
         )
+    except jwt.PyJWKClientError as exc:
+        raise AuthError("Không xác minh được token (không nối được Supabase)") from exc
     except jwt.PyJWTError as exc:
         raise AuthError("Token không hợp lệ hoặc đã hết hạn") from exc
-    if payload.get("type") != "access":
-        raise AuthError("Loại token không hợp lệ")
-    if not payload.get("sub") or not payload.get("sid"):
-        raise AuthError("Token thiếu thông tin phiên")
     return payload
-
-
-def generate_refresh_token() -> str:
-    """Refresh token 256-bit, chỉ trả cho client đúng 1 lần lúc login/refresh."""
-    return secrets.token_urlsafe(32)
-
-
-def hash_refresh_token(token: str) -> str:
-    """SHA-256 hex — giá trị duy nhất được phép ghi vào DB."""
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()

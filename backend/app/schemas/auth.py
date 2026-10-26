@@ -1,22 +1,12 @@
-"""Pydantic schema cho luồng xác thực (request/response của /api/v1/auth/*)."""
+"""Pydantic schema cho luồng xác thực (hiện chỉ còn /api/v1/auth/me).
+
+Đăng nhập/đăng ký/logout nằm hoàn toàn phía Supabase Auth — client không còn
+gọi các endpoint token; backend chỉ nhận Bearer token Supabase trên mọi API.
+"""
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class GoogleLoginRequest(BaseModel):
-    id_token: str = Field(min_length=20)
-    device_info: dict[str, str] | None = None
-
-
-class DevLoginRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=320)
-    name: str | None = Field(default=None, max_length=255)
-
-
-class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=20)
+from pydantic import BaseModel, ConfigDict
 
 
 class UserOut(BaseModel):
@@ -26,40 +16,3 @@ class UserOut(BaseModel):
     email: str
     name: str | None = None
     avatar_url: str | None = None
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: UserOut
-
-
-class RefreshResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int
-
-
-# Email đăng ký/đăng nhập mật khẩu: check cơ chế (có @ + domain), không đòi
-# email-validator (dependency chưa có trong requirements)
-_EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
-
-
-class RegisterRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=320, pattern=_EMAIL_PATTERN)
-    password: str = Field(min_length=6, max_length=128)
-    name: str | None = Field(default=None, max_length=255)
-
-
-class PasswordLoginRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=320, pattern=_EMAIL_PATTERN)
-    password: str = Field(min_length=6, max_length=128)
-    device_info: dict[str, str] | None = None
-
-
-class RegisterResponse(BaseModel):
-    message: str
-    email: str
