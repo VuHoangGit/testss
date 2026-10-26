@@ -10,22 +10,18 @@ import '../../domain/repositories/auth_repository.dart';
 import '../providers.dart';
 
 class AuthController extends AsyncNotifier<AuthSession?> {
+  StreamSubscription<AuthSession?>? _subscription;
+
   @override
   FutureOr<AuthSession?> build() {
     final AuthRepository repo = ref.watch(authRepositoryProvider);
-    return repo.restore();
-  }
-
-  /// Đăng nhập nhanh (dev) — thay bằng luồng Google sau khi cấu hình OAuth.
-  Future<void> signInDev({required String email, String? name}) async {
-    final AuthRepository repo = ref.read(authRepositoryProvider);
-    state = const AsyncValue<AuthSession?>.loading();
-    try {
-      final AuthSession session = await repo.devLogin(email: email, name: name);
+    // Mọi thay đổi phiên (đăng nhập popup Google, token refresh, đăng xuất ở
+    // tab khác) đều tự đẩy state mới — controller không cần biết nguồn phát.
+    _subscription = repo.sessionChanged.listen((AuthSession? session) {
       state = AsyncValue<AuthSession?>.data(session);
-    } on Exception catch (e, st) {
-      state = AsyncValue<AuthSession?>.error(e, st);
-    }
+    });
+    ref.onDispose(() => _subscription?.cancel());
+    return repo.currentSession();
   }
 
   /// Đăng nhập email/mật khẩu. Lỗi KHÔNG đưa vào state (tránh AuthGate hiện
@@ -57,14 +53,21 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         .register(email: email, password: password, name: name);
   }
 
-  /// Đăng xuất chủ động: revoke server (best-effort) + xóa local.
+  /// Đăng nhập Google (OAuth popup/redirect qua Supabase). Phiên khi có sẽ
+  /// về qua sessionChanged — ở đây không tự set state.
+  Future<void> signInWithGoogle() async {
+    await ref.read(authRepositoryProvider).signInWithGoogle();
+  }
+
+  /// Đăng xuất chủ động: xóa phiên local + thu hồi refresh token Supabase.
+  /// State về null cũng đến từ sessionChanged — set tại đây cho chắc.
   Future<void> signOut() async {
     final AuthRepository repo = ref.read(authRepositoryProvider);
     await repo.logout();
     state = const AsyncValue<AuthSession?>.data(null);
   }
 
-  /// Server từ chối phiên (refresh fail vì 401) — chỉ dọn local, không gọi mạng.
+  /// Server từ chối phiên (refresh fail) — chỉ dọn local, không gọi mạng.
   Future<void> forceSignOut() async {
     final AuthRepository repo = ref.read(authRepositoryProvider);
     await repo.clearLocal();

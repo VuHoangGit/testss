@@ -1,6 +1,4 @@
-/// Email and password sign-in / registration.
-///
-/// Luồng Google giữ nguyên code chờ cấu hình OAuth client ID (xem README).
+/// Đăng nhập email/mật khẩu + Google (Supabase Auth).
 library;
 
 import 'package:flutter/material.dart';
@@ -41,6 +39,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
         ),
       );
+  }
+
+  /// Đăng nhập Google qua Supabase: mở cửa sổ Google; khi thành công phiên
+  /// về qua sessionChanged và AuthGate tự chuyển màn — ở đây chỉ bắt lỗi.
+  Future<void> _signInWithGoogle() async {
+    try {
+      await ref.read(authControllerProvider.notifier).signInWithGoogle();
+    } on Exception catch (e) {
+      _showSnack('$e', isError: true);
+    }
   }
 
   Future<void> _submit() async {
@@ -182,12 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    onPressed: busy
-                        ? null
-                        : () => _showSnack(
-                            'Google sign-in will be available after configuring '
-                            'the OAuth client ID.',
-                          ),
+                    onPressed: busy ? null : _signInWithGoogle,
                     icon: const Icon(Icons.g_mobiledata),
                     label: const Text('Continue with Google'),
                   ),

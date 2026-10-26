@@ -20,8 +20,3 @@ class NetworkException implements Exception {
   @override
   String toString() => message;
 }
-
-/// User hủy account picker / consent của Google — xử lý im lặng (EC-04).
-class GoogleSignInCanceledException implements Exception {
-  const GoogleSignInCanceledException();
-}

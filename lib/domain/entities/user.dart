@@ -15,14 +15,11 @@ class User {
   final String? avatarUrl;
 }
 
+/// Phiên đăng nhập: access token do Supabase cấp, refresh do SDK tự lo
+/// (không còn refresh token phía client app).
 class AuthSession {
-  const AuthSession({
-    required this.user,
-    required this.accessToken,
-    required this.refreshToken,
-  });
+  const AuthSession({required this.user, required this.accessToken});
 
   final User user;
   final String accessToken;
-  final String refreshToken;
 }

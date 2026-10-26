@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/config/app_config.dart';
 import 'core/navigation/root_navigator_key.dart';
 import 'core/theme/app_theme.dart';
 import 'domain/entities/user.dart';
@@ -10,6 +12,13 @@ import 'presentation/shell/shell_screen.dart';
 import 'presentation/theme/theme_mode_provider.dart';
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Supabase tự khôi phục phiên từ localStorage và bắt session trong URL khi
+  // quay lại từ OAuth redirect (detectSessionInUrl mặc định bật).
+  await Supabase.initialize(
+    url: AppConfig.supabaseUrl,
+    publishableKey: AppConfig.supabaseAnonKey,
+  );
   runApp(const ProviderScope(child: DocuVaultApp()));
 }
 

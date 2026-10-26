@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,17 +15,23 @@ class _FakeAuthRepository implements AuthRepository {
   int loginCount = 0;
   int registerCount = 0;
   int logoutCount = 0;
+  int googleCount = 0;
   bool failRegister = false;
+
+  final StreamController<AuthSession?> _changes =
+      StreamController<AuthSession?>.broadcast();
 
   @override
   String? get cachedAccessToken => 'fake';
 
   @override
-  Future<void> clearLocal() async {}
+  Stream<AuthSession?> get sessionChanged => _changes.stream;
 
   @override
-  Future<AuthSession> devLogin({required String email, String? name}) async =>
-      _session(email, name);
+  Future<AuthSession?> currentSession() async => null;
+
+  @override
+  Future<void> clearLocal() async {}
 
   @override
   Future<AuthSession> login({
@@ -48,10 +56,10 @@ class _FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<void> logout() async => logoutCount++;
+  Future<void> signInWithGoogle() async => googleCount++;
 
   @override
-  Future<AuthSession?> restore() async => null;
+  Future<void> logout() async => logoutCount++;
 
   @override
   Future<AuthSession> refreshSession() async => throw UnimplementedError();
@@ -59,7 +67,6 @@ class _FakeAuthRepository implements AuthRepository {
   AuthSession _session(String email, String? name) => AuthSession(
     user: User(id: 'u-1', email: email, name: name ?? 'Tester'),
     accessToken: 'fake-access',
-    refreshToken: 'fake-refresh',
   );
 }
 
@@ -130,6 +137,21 @@ void main() {
     expect(find.text('Email đã được đăng ký'), findsOneWidget);
     // vẫn ở chế độ đăng ký
     expect(find.widgetWithText(FilledButton, 'Create account'), findsOneWidget);
+  });
+
+  testWidgets('Bấm "Continue with Google" → gọi signInWithGoogle, chưa vào Shell', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAuthRepository repo = _FakeAuthRepository();
+    await tester.pumpWidget(await _app(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pump();
+
+    expect(repo.googleCount, 1);
+    // Session sẽ về qua sessionChanged — ở đây chưa có nên vẫn ở Login
+    expect(find.text('Sign in'), findsOneWidget);
   });
 
   testWidgets('L4: logout có xác nhận → về Login', (WidgetTester tester) async {

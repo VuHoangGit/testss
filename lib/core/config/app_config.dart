@@ -2,7 +2,10 @@
 ///
 /// Ví dụ chạy:
 /// ```
-/// flutter run --dart-define=API_BASE_URL=http://localhost:8000/api/v1
+/// flutter run \
+///   --dart-define=API_BASE_URL=http://localhost:8000/api/v1 \
+///   --dart-define=SUPABASE_URL=https://<ref>.supabase.co \
+///   --dart-define=SUPABASE_ANON_KEY=<publishable key>
 /// ```
 library;
 
@@ -24,19 +27,17 @@ class AppConfig {
     return 'http://localhost:8000/api/v1';
   }
 
-  /// Web client ID (Google OAuth) — dùng khi tích hợp đăng nhập Google thật.
-  static const String googleWebClientId = String.fromEnvironment(
-    'GOOGLE_WEB_CLIENT_ID',
+  /// URL project Supabase (Auth) — Supabase Dashboard → Settings → API.
+  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+
+  /// Publishable key của project (public, KHÔNG phải secret key — key secret
+  /// chỉ nằm phía server và app này không dùng).
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
   );
 
-  /// Desktop client ID — cho luồng loopback + PKCE trên Windows (google_sign_in
-  /// không hỗ trợ Windows; xem lib/core/auth/desktop_google_sign_in.dart).
-  static const String googleDesktopClientId = String.fromEnvironment(
-    'GOOGLE_DESKTOP_CLIENT_ID',
-  );
-
-  /// iOS client ID — khai báo GIDClientID trong Info.plist khi tích hợp.
-  static const String googleIosClientId = String.fromEnvironment(
-    'GOOGLE_IOS_CLIENT_ID',
-  );
+  /// Origin hiện tại của app — dùng làm đích redirect sau khi OAuth.
+  /// Trên web lấy từ URL thanh địa chỉ (đúng cả khi đổi port dev).
+  static String get appOrigin =>
+      kIsWeb ? Uri.base.origin : 'http://localhost:53123';
 }
