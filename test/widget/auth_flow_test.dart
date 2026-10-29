@@ -16,10 +16,14 @@ class _FakeAuthRepository implements AuthRepository {
   int registerCount = 0;
   int logoutCount = 0;
   int googleCount = 0;
+  int resetEmailCount = 0;
+  int updatePasswordCount = 0;
   bool failRegister = false;
+  List<String> resetEmails = <String>[];
 
   final StreamController<AuthSession?> _changes =
       StreamController<AuthSession?>.broadcast();
+  final StreamController<bool> _recovery = StreamController<bool>.broadcast();
 
   @override
   String? get cachedAccessToken => 'fake';
@@ -28,10 +32,19 @@ class _FakeAuthRepository implements AuthRepository {
   Stream<AuthSession?> get sessionChanged => _changes.stream;
 
   @override
-  Future<AuthSession?> currentSession() async => null;
+  Stream<bool> get passwordRecoveryChanged => _recovery.stream;
+
+  /// true = đã có phiên (dùng cho test luồng recovery link).
+  bool hasSession = false;
 
   @override
-  Future<void> clearLocal() async {}
+  Future<AuthSession?> currentSession() async =>
+      hasSession ? _session('hoang@gmail.com', null) : null;
+
+  int clearLocalCount = 0;
+
+  @override
+  Future<void> clearLocal() async => clearLocalCount++;
 
   @override
   Future<AuthSession> login({
@@ -57,6 +70,18 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> signInWithGoogle() async => googleCount++;
+
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    resetEmailCount++;
+    resetEmails.add(email);
+  }
+
+  @override
+  Future<void> updatePassword(String password) async => updatePasswordCount++;
+
+  /// Giả lập user mở link "Quên mật khẩu" trong email.
+  void emitRecovery() => _recovery.add(true);
 
   @override
   Future<void> logout() async => logoutCount++;
@@ -139,20 +164,21 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Create account'), findsOneWidget);
   });
 
-  testWidgets('Bấm "Continue with Google" → gọi signInWithGoogle, chưa vào Shell', (
-    WidgetTester tester,
-  ) async {
-    final _FakeAuthRepository repo = _FakeAuthRepository();
-    await tester.pumpWidget(await _app(repo));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'Bấm "Continue with Google" → gọi signInWithGoogle, chưa vào Shell',
+    (WidgetTester tester) async {
+      final _FakeAuthRepository repo = _FakeAuthRepository();
+      await tester.pumpWidget(await _app(repo));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continue with Google'));
-    await tester.pump();
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pump();
 
-    expect(repo.googleCount, 1);
-    // Session sẽ về qua sessionChanged — ở đây chưa có nên vẫn ở Login
-    expect(find.text('Sign in'), findsOneWidget);
-  });
+      expect(repo.googleCount, 1);
+      // Session sẽ về qua sessionChanged — ở đây chưa có nên vẫn ở Login
+      expect(find.text('Sign in'), findsOneWidget);
+    },
+  );
 
   testWidgets('L4: logout có xác nhận → về Login', (WidgetTester tester) async {
     final _FakeAuthRepository repo = _FakeAuthRepository();
@@ -174,6 +200,50 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.logoutCount, 1);
+    expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+  });
+
+  testWidgets('Quên mật khẩu: dialog nhập email → gửi reset + snackbar', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAuthRepository repo = _FakeAuthRepository();
+    await tester.pumpWidget(await _app(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Forgot password?'));
+    await tester.pumpAndSettle();
+    expect(find.text('Reset password'), findsOneWidget);
+
+    // TextField cuối cùng = của dialog (đè lên form login)
+    await tester.enterText(find.byType(TextField).last, 'hoang@gmail.com');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send email'));
+    await tester.pump();
+
+    expect(repo.resetEmailCount, 1);
+    expect(repo.resetEmails.first, 'hoang@gmail.com');
+    expect(find.text('Reset email sent — check your inbox.'), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget); // vẫn ở màn login
+  });
+
+  testWidgets('Link recovery → màn đặt mật khẩu mới → về Login', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAuthRepository repo = _FakeAuthRepository()..hasSession = true;
+    await tester.pumpWidget(await _app(repo));
+    await tester.pumpAndSettle();
+
+    // Mở link "Quên mật khẩu" → event recovery → AuthGate đổi màn
+    repo.emitRecovery();
+    await tester.pumpAndSettle();
+    expect(find.text('Set a new password'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'newpass123');
+    await tester.enterText(find.byType(TextFormField).at(1), 'newpass123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Update password'));
+    await tester.pumpAndSettle();
+
+    expect(repo.updatePasswordCount, 1);
+    expect(repo.clearLocalCount, 1); // đăng xuất local sau khi đổi mật khẩu
     expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
   });
 }

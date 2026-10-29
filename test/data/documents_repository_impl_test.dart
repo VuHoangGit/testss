@@ -27,7 +27,8 @@ void main() {
     repo = DocumentsRepositoryImpl(dio: dio);
   });
 
-  ResponseBody jsonBody(Object payload, [int status = 200]) => ResponseBody.fromString(
+  ResponseBody jsonBody(Object payload, [int status = 200]) =>
+      ResponseBody.fromString(
         jsonEncode(payload),
         status,
         headers: <String, List<String>>{
@@ -73,7 +74,11 @@ void main() {
     RequestOptions? captured;
     when(() => adapter.fetch(any(), any(), any())).thenAnswer((inv) async {
       captured = inv.positionalArguments[0] as RequestOptions;
-      return jsonBody(<String, dynamic>{'id': 'f9', 'name': 'Hợp đồng', 'document_count': 0}, 201);
+      return jsonBody(<String, dynamic>{
+        'id': 'f9',
+        'name': 'Hợp đồng',
+        'document_count': 0,
+      }, 201);
     });
     final folder = await repo.createFolder('Hợp đồng');
     expect(captured!.method, 'POST');
@@ -103,7 +108,10 @@ void main() {
     );
     expect(captured!.path, '/documents');
     expect(captured!.data, isA<FormData>());
-    expect(sentTotal, isZero); // callback không được gọi khi mock không báo progress
+    expect(
+      sentTotal,
+      isZero,
+    ); // callback không được gọi khi mock không báo progress
   });
 
   test('downloadDocument trả về bytes gốc', () async {
@@ -124,7 +132,8 @@ void main() {
 
   test('lỗi 404 ném exception kèm detail tiếng Việt', () async {
     when(() => adapter.fetch(any(), any(), any())).thenAnswer(
-      (_) async => jsonBody(<String, dynamic>{'detail': 'Không tìm thấy tài liệu'}, 404),
+      (_) async =>
+          jsonBody(<String, dynamic>{'detail': 'Không tìm thấy tài liệu'}, 404),
     );
     await expectLater(
       repo.deleteDocument('khong-ton-tai'),

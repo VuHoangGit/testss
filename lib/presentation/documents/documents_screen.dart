@@ -270,9 +270,42 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       data: (DocumentsState data) {
         return Column(
           children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 26, 28, 4),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'My Files',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Manage, organize and secure your documents.',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${data.documents.length} files',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.outline,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             _buildToolbar(context, data),
             _buildFolderChips(context, data),
-            const Divider(height: 1),
             Expanded(child: _buildList(context, data)),
           ],
         );
@@ -282,7 +315,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   Widget _buildToolbar(BuildContext context, DocumentsState data) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -340,47 +373,71 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     final DocumentsController notifier = ref.read(
       documentsControllerProvider.notifier,
     );
-    final List<Widget> chips = <Widget>[
-      Padding(
-        padding: const EdgeInsets.only(left: 12),
-        child: ChoiceChip(
-          label: const Text('All'),
-          selected: data.selectedFolderId == null,
-          onSelected: (_) => _guard(() => notifier.selectFolder(null)),
-        ),
+
+    Future<void> deleteFolder(DocumentFolder folder) async {
+      final bool ok = await _confirm(
+        'Delete folder?',
+        'Folder "${folder.name}" can only be deleted when empty. Continue?',
+      );
+      if (ok) {
+        await _guard(
+          () => notifier.deleteFolder(folder.id),
+          done: 'Deleted folder "${folder.name}"',
+        );
+      }
+    }
+
+    final List<Widget> cards = <Widget>[
+      _FolderCard(
+        name: 'All',
+        count: data.documents.length,
+        selected: data.selectedFolderId == null,
+        onTap: () => _guard(() => notifier.selectFolder(null)),
       ),
       for (final DocumentFolder folder in data.folders)
-        Padding(
-          padding: const EdgeInsets.only(left: 8),
-          child: InputChip(
-            label: Text('${folder.name} (${folder.documentCount})'),
-            selected: data.selectedFolderId == folder.id,
-            onSelected: (_) => _guard(() => notifier.selectFolder(folder.id)),
-            onDeleted: () async {
-              final bool ok = await _confirm(
-                'Delete folder?',
-                'Folder "${folder.name}" can only be deleted when empty. Continue?',
-              );
-              if (ok) {
-                await _guard(
-                  () => notifier.deleteFolder(folder.id),
-                  done: 'Deleted folder "${folder.name}"',
-                );
-              }
-            },
-          ),
+        _FolderCard(
+          name: folder.name,
+          count: folder.documentCount,
+          selected: data.selectedFolderId == folder.id,
+          onTap: () => _guard(() => notifier.selectFolder(folder.id)),
+          onDelete: () => deleteFolder(folder),
         ),
     ];
     return SizedBox(
-      height: 48,
-      child: ListView(scrollDirection: Axis.horizontal, children: chips),
+      height: 84,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 6),
+        scrollDirection: Axis.horizontal,
+        itemCount: cards.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (_, int i) => cards[i],
+      ),
     );
   }
 
   Widget _buildList(BuildContext context, DocumentsState data) {
     if (data.documents.isEmpty) {
-      return const Center(
-        child: Text('No documents yet — tap "Upload" to add your first file'),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              Icons.folder_open_rounded,
+              size: 44,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No documents yet',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'No documents yet — tap "Upload" to add your first file',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       );
     }
     final DocumentsController notifier = ref.read(
@@ -389,8 +446,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     return RefreshIndicator(
       onRefresh: () => notifier.selectFolder(data.selectedFolderId),
       child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
         itemCount: data.documents.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (BuildContext ctx, int index) {
           final DocumentItem doc = data.documents[index];
           return _DocumentTile(
@@ -406,6 +464,89 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             onOpenViewer: () => _openViewer(doc),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Card thư mục ngang (spec: 180–200px) — chọn để lọc, icon xóa có confirm.
+class _FolderCard extends StatelessWidget {
+  const _FolderCard({
+    required this.name,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+    this.onDelete,
+  });
+
+  final String name;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 190,
+      child: Card(
+        color: selected ? colors.primaryContainer : colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? colors.primary : colors.outline),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  selected ? Icons.folder_rounded : Icons.folder_outlined,
+                  size: 24,
+                  color: selected ? colors.primary : colors.onSurfaceVariant,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                          color: selected ? colors.primary : colors.onSurface,
+                        ),
+                      ),
+                      Text(
+                        count == 1 ? '1 file' : '$count files',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                if (onDelete != null)
+                  InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onDelete,
+                    child: Icon(
+                      Icons.close,
+                      size: 16,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -442,6 +583,9 @@ class _DocumentTile extends StatelessWidget {
     return Icons.description_outlined;
   }
 
+  Color _iconTint(ColorScheme colors) =>
+      doc.isPdf ? colors.error : colors.primary;
+
   String get _meta {
     final double mb = doc.sizeBytes / (1024 * 1024);
     final String size = mb >= 1
@@ -452,49 +596,107 @@ class _DocumentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(_icon, color: Theme.of(context).colorScheme.primary),
-      title: Text(doc.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_meta),
-      trailing: selectionMode
-          ? Checkbox(value: selected, onChanged: (bool? _) => onToggleSelect())
-          : PopupMenuButton<String>(
-              onSelected: (String action) {
-                switch (action) {
-                  case 'download':
-                    onDownload();
-                  case 'split':
-                    onSplit();
-                  case 'protect':
-                    onProtect();
-                  case 'unprotect':
-                    onUnprotect();
-                  case 'delete':
-                    onDelete();
-                }
-              },
-              itemBuilder: (BuildContext ctx) => const <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
-                  value: 'download',
-                  child: Text('Download'),
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: selected ? colors.primary : colors.outline,
+          width: selected ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: selectionMode ? onToggleSelect : onOpenViewer,
+        child: SizedBox(
+          height: 64,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _iconTint(colors).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(_icon, size: 21, color: _iconTint(colors)),
                 ),
-                PopupMenuItem<String>(
-                  value: 'split',
-                  child: Text('Split pages…'),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        doc.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(_meta, style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
                 ),
-                PopupMenuItem<String>(
-                  value: 'protect',
-                  child: Text('Set password…'),
-                ),
-                PopupMenuItem<String>(
-                  value: 'unprotect',
-                  child: Text('Remove password…'),
-                ),
-                PopupMenuDivider(),
-                PopupMenuItem<String>(value: 'delete', child: Text('Delete')),
+                if (selectionMode)
+                  Checkbox(
+                    value: selected,
+                    onChanged: (bool? _) => onToggleSelect(),
+                  )
+                else
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, color: colors.onSurfaceVariant),
+                    onSelected: (String action) {
+                      switch (action) {
+                        case 'download':
+                          onDownload();
+                        case 'split':
+                          onSplit();
+                        case 'protect':
+                          onProtect();
+                        case 'unprotect':
+                          onUnprotect();
+                        case 'delete':
+                          onDelete();
+                      }
+                    },
+                    itemBuilder: (BuildContext ctx) => <PopupMenuEntry<String>>[
+                      const PopupMenuItem<String>(
+                        value: 'download',
+                        child: Text('Download'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'split',
+                        child: Text('Split pages…'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'protect',
+                        child: Text('Set password…'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'unprotect',
+                        child: Text('Remove password…'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: colors.error),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             ),
-      onTap: selectionMode ? onToggleSelect : onOpenViewer,
+          ),
+        ),
+      ),
     );
   }
 }

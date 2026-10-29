@@ -106,7 +106,8 @@ class _VoicePanelState extends ConsumerState<VoicePanel> {
   Widget _statusIcon(VoiceState voice, ColorScheme colors) {
     switch (voice.phase) {
       case VoicePhase.listening:
-        return Icon(Icons.mic, color: colors.primary);
+        // Violet (secondary) cho trạng thái đang nghe — khớp màu AI
+        return Icon(Icons.mic, color: colors.secondary);
       case VoicePhase.processing:
       case VoicePhase.executing:
         return SizedBox(

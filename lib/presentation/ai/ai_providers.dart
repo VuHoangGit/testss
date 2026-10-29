@@ -1,12 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/repositories/ai_chat_repository_impl.dart';
 import '../../data/repositories/ai_repository_impl.dart';
+import '../../domain/entities/chat_entities.dart';
+import '../../domain/repositories/ai_chat_repository.dart';
 import '../../domain/repositories/ai_repository.dart';
 import '../providers.dart';
 
 final Provider<AiRepository> aiRepositoryProvider = Provider<AiRepository>(
   (Ref ref) => AiRepositoryImpl(dio: ref.watch(apiDioProvider)),
 );
+
+final Provider<AiChatRepository> aiChatRepositoryProvider =
+    Provider<AiChatRepository>(
+      (Ref ref) => AiChatRepositoryImpl(dio: ref.watch(apiDioProvider)),
+    );
 
 /// Index công cụ trong tab AI: 0 OCR · 1 Chat · 2 Dịch.
 final NotifierProvider<AiToolController, int> aiToolProvider =
@@ -75,37 +83,70 @@ class LastAiResultsController extends Notifier<LastAiResults> {
 }
 
 /// Tin nhắn chat với AI — tách khỏi screen để voice cũng nối đoạn hội thoại.
-class ChatMessage {
-  const ChatMessage({required this.text, required this.fromUser});
+/// Lịch sử được lưu phía backend theo tài liệu; đổi tài liệu → load lại.
 
-  final String text;
-  final bool fromUser;
+class ChatHistoryState {
+  const ChatHistoryState({
+    this.documentId,
+    this.conversationId,
+    this.messages = const <ChatMessage>[],
+    this.loading = false,
+  });
+
+  /// Tài liệu đang mở lịch sử — null = chưa gắn tài liệu nào.
+  final String? documentId;
+
+  /// Hội thoại trên server của tài liệu (null = chưa có hội thoại nào).
+  final String? conversationId;
+  final List<ChatMessage> messages;
+  final bool loading;
 }
 
-final NotifierProvider<ChatMessagesController, List<ChatMessage>>
+final NotifierProvider<ChatMessagesController, ChatHistoryState>
 chatMessagesProvider =
-    NotifierProvider<ChatMessagesController, List<ChatMessage>>(
+    NotifierProvider<ChatMessagesController, ChatHistoryState>(
       ChatMessagesController.new,
     );
 
-class ChatMessagesController extends Notifier<List<ChatMessage>> {
+class ChatMessagesController extends Notifier<ChatHistoryState> {
   @override
-  List<ChatMessage> build() => <ChatMessage>[
-    const ChatMessage(
-      text: 'Hello! Select a document and ask a question. I will answer based on its content.',
-      fromUser: false,
-    ),
-  ];
+  ChatHistoryState build() => const ChatHistoryState();
 
-  void add(String text, {required bool fromUser}) => state = <ChatMessage>[
-    ...state,
-    ChatMessage(text: text, fromUser: fromUser),
-  ];
+  /// Tải hội thoại mới nhất của tài liệu; lỗi tải thì rỗng — không chặn chat mới.
+  Future<void> loadForDocument(String documentId) async {
+    if (state.documentId == documentId) return; // đang đúng tài liệu
+    state = ChatHistoryState(documentId: documentId, loading: true);
+    try {
+      final AiChatRepository repo = ref.read(aiChatRepositoryProvider);
+      final List<ChatConversation> conversations = await repo.conversations(
+        documentId: documentId,
+      );
+      if (conversations.isEmpty) {
+        state = ChatHistoryState(documentId: documentId);
+        return;
+      }
+      final ChatConversation latest = conversations.first;
+      final List<ChatMessage> history = await repo.messages(
+        conversationId: latest.id,
+      );
+      state = ChatHistoryState(
+        documentId: documentId,
+        conversationId: latest.id,
+        messages: history,
+      );
+    } on Exception {
+      state = ChatHistoryState(documentId: documentId);
+    }
+  }
 
-  void clear() => state = <ChatMessage>[
-    const ChatMessage(
-      text: 'Hello! Select a document and ask a question. I will answer based on its content.',
-      fromUser: false,
-    ),
-  ];
+  void add(String text, {required bool fromUser}) => state = ChatHistoryState(
+    documentId: state.documentId,
+    conversationId: state.conversationId,
+    messages: <ChatMessage>[
+      ...state.messages,
+      ChatMessage(role: fromUser ? 'user' : 'assistant', content: text),
+    ],
+  );
+
+  void clear() => state = const ChatHistoryState();
 }

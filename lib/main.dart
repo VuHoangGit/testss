@@ -6,7 +6,9 @@ import 'core/config/app_config.dart';
 import 'core/navigation/root_navigator_key.dart';
 import 'core/theme/app_theme.dart';
 import 'domain/entities/user.dart';
+import 'presentation/auth/auth_controller.dart';
 import 'presentation/login/login_screen.dart';
+import 'presentation/login/reset_password_screen.dart';
 import 'presentation/providers.dart';
 import 'presentation/shell/shell_screen.dart';
 import 'presentation/theme/theme_mode_provider.dart';
@@ -46,6 +48,8 @@ class AuthGate extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<AuthSession?> auth = ref.watch(authControllerProvider);
+    // Phiên đến từ link "Quên mật khẩu" → màn đặt mật khẩu mới thay vì app
+    final bool recovery = ref.watch(passwordRecoveryProvider);
 
     return auth.when(
       loading: () =>
@@ -65,8 +69,11 @@ class AuthGate extends ConsumerWidget {
           ),
         ),
       ),
-      data: (AuthSession? session) =>
-          session == null ? const LoginScreen() : ShellScreen(session: session),
+      data: (AuthSession? session) => session == null
+          ? const LoginScreen()
+          : recovery
+          ? const ResetPasswordScreen()
+          : ShellScreen(session: session),
     );
   }
 }

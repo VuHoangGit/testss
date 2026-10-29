@@ -31,6 +31,7 @@ Future<String> openPdfViewer({
       builder: (_) => PdfViewerScreen(
         fileName: doc.name,
         bytes: bytes,
+        subtitle: _describeDoc(doc),
         onTranslateSelection: (String text) => aiRepository.translate(text),
       ),
     ),
@@ -77,6 +78,15 @@ Future<String> _openImageViewer({
     ),
   );
   return 'Đã mở "${doc.name}"';
+}
+
+/// Metadata một dòng cho toolbar của viewer (kích thước + số trang nếu có).
+String _describeDoc(DocumentItem doc) {
+  final double mb = doc.sizeBytes / (1024 * 1024);
+  final String size = mb >= 1
+      ? '${mb.toStringAsFixed(1)} MB'
+      : '${(doc.sizeBytes / 1024).toStringAsFixed(0)} KB';
+  return doc.pageCount != null ? '${doc.pageCount} trang · $size' : size;
 }
 
 /// Điều hướng theo loại file: PDF → viewer gốc, Word/txt/md → trình xem văn

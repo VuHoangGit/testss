@@ -8,11 +8,15 @@ class PdfViewerScreen extends StatefulWidget {
     super.key,
     required this.fileName,
     required this.bytes,
+    this.subtitle,
     this.onTranslateSelection,
   });
 
   final String fileName;
   final Uint8List bytes;
+
+  /// Metadata hiển thị dưới tên file (kích thước, số trang…).
+  final String? subtitle;
   final Future<String> Function(String text)? onTranslateSelection;
 
   @override
@@ -52,10 +56,27 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          widget.fileName,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              widget.fileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            if (widget.subtitle != null)
+              Text(
+                widget.subtitle!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+          ],
         ),
         actions: <Widget>[
           IconButton(
@@ -70,19 +91,25 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           ),
         ],
       ),
-      body: SfPdfViewer.memory(
-        widget.bytes,
-        controller: _controller,
-        onTextSelectionChanged: (PdfTextSelectionChangedDetails details) {
-          if (!mounted) return;
-          setState(() {
-            _selectedText = details.selectedText?.trim();
-            if (_selectedText == null) _translation = null;
-          });
-        },
-        canShowScrollHead: true,
-        canShowScrollStatus: true,
-        enableDoubleTapZooming: true,
+      // Nền xám nhạt quanh trang giấy (spec PDF viewer)
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: SfPdfViewer.memory(
+          widget.bytes,
+          controller: _controller,
+          onTextSelectionChanged: (PdfTextSelectionChangedDetails details) {
+            if (!mounted) return;
+            setState(() {
+              _selectedText = details.selectedText?.trim();
+              if (_selectedText == null) _translation = null;
+            });
+          },
+          canShowScrollHead: true,
+          canShowScrollStatus: true,
+          enableDoubleTapZooming: true,
+        ),
       ),
       bottomSheet: _selectedText == null || widget.onTranslateSelection == null
           ? null
