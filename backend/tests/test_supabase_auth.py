@@ -30,8 +30,20 @@ class TestVerifySupabaseToken:
             security.verify_supabase_token(make_token(audience="anon"))
 
     def test_rejects_expired_token(self, make_token):
+        # Hết hạn ngoài leeway (30s) mới bị chối
         with pytest.raises(AuthError):
-            security.verify_supabase_token(make_token(expires_in_seconds=-10))
+            security.verify_supabase_token(make_token(expires_in_seconds=-120))
+
+    def test_accepts_token_issued_in_near_future(self, make_token):
+        """Máy local chậm hơn Supabase vài giây: iat > giờ máy nhưng trong
+        leeway → vẫn phải verify được (bug login xong bị đá về trang login)."""
+        token = make_token(iat_offset_seconds=10)
+        payload = security.verify_supabase_token(token)
+        assert payload["sub"] == "sub-1"
+
+    def test_rejects_token_issued_far_future(self, make_token):
+        with pytest.raises(AuthError):
+            security.verify_supabase_token(make_token(iat_offset_seconds=120))
 
 
 class TestResolveSupabaseUser:
@@ -129,6 +141,14 @@ class TestAuthMeEndpoint:
         resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 401
         assert "xác thực email" in resp.json()["detail"]
+
+    def test_accepts_token_without_email_verified_claim(self, client, make_token):
+        """JWT Signing Keys mới của Supabase bỏ claim `email_verified` khỏi
+        access token — token như vậy vẫn phải tạo user + login bình thường."""
+        token = make_token(sub="sub-new-keys", email="newkeys@gmail.com", email_verified=None)
+        resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["email"] == "newkeys@gmail.com"
 
     def test_rejects_disallowed_email_domain(self, client, make_token, monkeypatch):
         monkeypatch.setattr(get_settings(), "allowed_email_domains", "congty.vn")

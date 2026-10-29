@@ -41,8 +41,12 @@ def get_current_user(
     name = metadata.get("full_name") or metadata.get("name")
     avatar = metadata.get("avatar_url") or metadata.get("picture")
 
-    # Chỉ tin email đã verify khi khớp user cũ/tạo mới (chống chiếm email người khác)
-    email_verified = payload.get("email_verified") is True
+    # Chỉ tin email đã verify khi khớp user cũ/tạo mới (chống chiếm email người khác).
+    # Token từ JWT Signing Keys mới của Supabase KHÔNG còn claim `email_verified`
+    # (đo trên token thật) — Supabase chỉ cấp token password/OAuth cho account đã
+    # xác nhận email, nên token đã verify chữ ký thì email đáng tin; chỉ chặn
+    # khi claim = false tường minh.
+    email_verified = payload.get("email_verified", True) is True
     user = auth_service.resolve_supabase_user(
         db,
         str(payload["sub"]),

@@ -91,6 +91,37 @@ class SupabaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.resetPasswordForEmail(
+        email,
+        // Link trong email quay về app — Supabase exchange token rồi phát
+        // event passwordRecovery kèm phiên (bắt qua passwordRecoveryChanged).
+        redirectTo: _redirectTarget,
+      );
+    } on supabase.AuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  @override
+  Future<void> updatePassword(String password) async {
+    try {
+      await _auth.updateUser(supabase.UserAttributes(password: password));
+    } on supabase.AuthException catch (e) {
+      throw _mapAuthError(e);
+    }
+  }
+
+  @override
+  Stream<bool> get passwordRecoveryChanged => _auth.onAuthStateChange
+      .map(
+        (supabase.AuthState state) =>
+            state.event == supabase.AuthChangeEvent.passwordRecovery,
+      )
+      .where((bool isRecovery) => isRecovery);
+
+  @override
   Future<AuthSession> refreshSession() async {
     if (_auth.currentSession == null) {
       throw const AuthException('Chưa có phiên đăng nhập');
@@ -130,8 +161,7 @@ class SupabaseAuthRepository implements AuthRepository {
     return _isWebOriginUsable ? Uri.base.origin : 'http://localhost:53123';
   }
 
-  bool get _isWebOriginUsable =>
-      Uri.base.hasScheme && Uri.base.host.isNotEmpty;
+  bool get _isWebOriginUsable => Uri.base.hasScheme && Uri.base.host.isNotEmpty;
 
   /// Ưu tiên profile từ backend (đúng id user local); backend không phản hồi
   /// thì dùng dữ liệu trong token để app vẫn vào được (offline-friendly).

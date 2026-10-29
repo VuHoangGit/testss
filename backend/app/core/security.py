@@ -47,6 +47,10 @@ def verify_supabase_token(token: str, *, settings: Settings | None = None) -> di
             issuer=s.supabase_issuer,
             audience="authenticated",
             options={"require": ["exp", "iss", "sub"]},
+            # leeway: chấp nhận sai lệch đồng hồ nhỏ giữa máy local và Supabase.
+            # Không có leeway, máy chậm dù chỉ 1 giây cũng chối token vừa cấp
+            # (iat > giờ máy → ImmatureSignatureError) → login xong bị đá ra.
+            leeway=30,
         )
     except jwt.PyJWKClientError as exc:
         raise AuthError("Không xác minh được token (không nối được Supabase)") from exc

@@ -11,6 +11,7 @@ import '../providers.dart';
 
 class AuthController extends AsyncNotifier<AuthSession?> {
   StreamSubscription<AuthSession?>? _subscription;
+  StreamSubscription<bool>? _recoverySubscription;
 
   @override
   FutureOr<AuthSession?> build() {
@@ -20,7 +21,15 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     _subscription = repo.sessionChanged.listen((AuthSession? session) {
       state = AsyncValue<AuthSession?>.data(session);
     });
-    ref.onDispose(() => _subscription?.cancel());
+    // Phiên đến từ link "Quên mật khẩu" → bật cờ để AuthGate hiện màn đặt
+    // mật khẩu mới thay vì app chính.
+    _recoverySubscription = repo.passwordRecoveryChanged.listen((_) {
+      ref.read(passwordRecoveryProvider.notifier).set(true);
+    });
+    ref.onDispose(() {
+      _subscription?.cancel();
+      _recoverySubscription?.cancel();
+    });
     return repo.currentSession();
   }
 
@@ -73,4 +82,32 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     await repo.clearLocal();
     state = const AsyncValue<AuthSession?>.data(null);
   }
+
+  /// Gửi email đặt lại mật khẩu; lỗi ném về UI để hiện SnackBar.
+  Future<void> sendPasswordReset(String email) async {
+    await ref.read(authRepositoryProvider).sendPasswordReset(email);
+  }
+
+  /// Hoàn tất đặt lại mật khẩu (từ link recovery): đổi mật khẩu → đăng xuất
+  /// local → về màn đăng nhập. Lỗi đổi mật khẩu ném về UI.
+  Future<void> completePasswordReset(String newPassword) async {
+    final AuthRepository repo = ref.read(authRepositoryProvider);
+    await repo.updatePassword(newPassword);
+    await repo.clearLocal();
+    ref.read(passwordRecoveryProvider.notifier).set(false);
+    state = const AsyncValue<AuthSession?>.data(null);
+  }
+}
+
+/// true khi phiên hiện tại đến từ link "Quên mật khẩu" (recovery).
+final NotifierProvider<PasswordRecoveryController, bool>
+passwordRecoveryProvider = NotifierProvider<PasswordRecoveryController, bool>(
+  PasswordRecoveryController.new,
+);
+
+class PasswordRecoveryController extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
 }

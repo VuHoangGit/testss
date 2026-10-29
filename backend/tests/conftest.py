@@ -67,10 +67,13 @@ def make_token(_signing_key) -> Callable[..., str]:
         sub: str = "sub-1",
         email: str = "user1@example.com",
         *,
-        email_verified: bool = True,
+        # None = bỏ claim (token JWT Signing Keys mới của Supabase không có)
+        email_verified: bool | None = True,
         name: str | None = None,
         avatar_url: str | None = None,
         expires_in_seconds: int = 3600,
+        # >0: iat nằm trong tương lai (giả lập máy local chậm hơn Supabase)
+        iat_offset_seconds: int = 0,
         issuer: str = _TEST_ISSUER,
         audience: str = "authenticated",
     ) -> str:
@@ -84,12 +87,13 @@ def make_token(_signing_key) -> Callable[..., str]:
             "sub": sub,
             "iss": issuer,
             "aud": audience,
-            "iat": int(now.timestamp()),
+            "iat": int(now.timestamp()) + iat_offset_seconds,
             "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
             "email": email,
-            "email_verified": email_verified,
             "user_metadata": metadata,
         }
+        if email_verified is not None:
+            payload["email_verified"] = email_verified
         return jwt.encode(payload, _signing_key, algorithm="RS256")
 
     return _make

@@ -8,7 +8,8 @@ import 'package:testss/core/network/auth_interceptor.dart';
 
 class _MockAdapter extends Mock implements HttpClientAdapter {}
 
-ResponseBody _body(int status, Map<String, dynamic> json) => ResponseBody.fromString(
+ResponseBody _body(int status, Map<String, dynamic> json) =>
+    ResponseBody.fromString(
       jsonEncode(json),
       status,
       headers: <String, List<String>>{
@@ -37,10 +38,11 @@ void main() {
     refreshCount = 0;
     sessionExpiredCount = 0;
 
-    when(() => adapter.fetch(any(), any(), any())).thenAnswer((Invocation _) async {
-      if (queue.isEmpty) throw StateError('hết response trong queue');
-      return queue.removeAt(0);
-    });
+    when(() => adapter.fetch(any(), any(), any()))
+        .thenAnswer((Invocation _) async {
+          if (queue.isEmpty) throw StateError('hết response trong queue');
+          return queue.removeAt(0);
+        });
 
     dio.interceptors.add(
       AuthInterceptor(
@@ -69,61 +71,77 @@ void main() {
     expect(sessionExpiredCount, 0);
   });
 
-  test('refresh nổ AuthException → onSessionExpired 1 lần, request trả 401', () async {
-    dio.interceptors.clear();
-    dio.interceptors.add(
-      AuthInterceptor(
-        dio: dio,
-        getAccessToken: () => currentToken,
-        refresh: () async => throw const AuthException('hết hạn'),
-        onSessionExpired: () => sessionExpiredCount++,
-      ),
-    );
-    queue.addAll(<ResponseBody>[_body(401, <String, dynamic>{})]);
-
-    await expectLater(
-      dio.get<dynamic>('/things'),
-      throwsA(
-        isA<DioException>().having(
-          (DioException e) => e.response?.statusCode,
-          'status',
-          401,
+  test(
+    'refresh nổ AuthException → onSessionExpired 1 lần, request trả 401',
+    () async {
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        AuthInterceptor(
+          dio: dio,
+          getAccessToken: () => currentToken,
+          refresh: () async => throw const AuthException('hết hạn'),
+          onSessionExpired: () => sessionExpiredCount++,
         ),
-      ),
-    );
-    expect(sessionExpiredCount, 1);
-  });
+      );
+      queue.addAll(<ResponseBody>[_body(401, <String, dynamic>{})]);
 
-  test('refresh nổ NetworkException → KHÔNG onSessionExpired (giữ phiên)', () async {
-    dio.interceptors.clear();
-    dio.interceptors.add(
-      AuthInterceptor(
-        dio: dio,
-        getAccessToken: () => currentToken,
-        refresh: () async => throw const NetworkException(),
-        onSessionExpired: () => sessionExpiredCount++,
-      ),
-    );
-    queue.addAll(<ResponseBody>[_body(401, <String, dynamic>{})]);
+      await expectLater(
+        dio.get<dynamic>('/things'),
+        throwsA(
+          isA<DioException>().having(
+            (DioException e) => e.response?.statusCode,
+            'status',
+            401,
+          ),
+        ),
+      );
+      expect(sessionExpiredCount, 1);
+    },
+  );
 
-    await expectLater(dio.get<dynamic>('/things'), throwsA(isA<DioException>()));
-    expect(sessionExpiredCount, 0);
-  });
+  test(
+    'refresh nổ NetworkException → KHÔNG onSessionExpired (giữ phiên)',
+    () async {
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        AuthInterceptor(
+          dio: dio,
+          getAccessToken: () => currentToken,
+          refresh: () async => throw const NetworkException(),
+          onSessionExpired: () => sessionExpiredCount++,
+        ),
+      );
+      queue.addAll(<ResponseBody>[_body(401, <String, dynamic>{})]);
 
-  test('2 request song song cùng 401 → cả hai retry thành công với token mới', () async {
-    queue.addAll(<ResponseBody>[
-      _body(401, <String, dynamic>{}),
-      _body(401, <String, dynamic>{}),
-      _body(200, <String, dynamic>{'id': 1}),
-      _body(200, <String, dynamic>{'id': 2}),
-    ]);
+      await expectLater(
+        dio.get<dynamic>('/things'),
+        throwsA(isA<DioException>()),
+      );
+      expect(sessionExpiredCount, 0);
+    },
+  );
 
-    final List<Response<dynamic>> results =
-        await Future.wait(<Future<Response<dynamic>>>[
-      dio.get<dynamic>('/things'),
-      dio.get<dynamic>('/things'),
-    ]);
-    expect(results.length, 2);
-    expect(results.every((Response<dynamic> r) => r.statusCode == 200), isTrue);
-  });
+  test(
+    '2 request song song cùng 401 → cả hai retry thành công với token mới',
+    () async {
+      queue.addAll(<ResponseBody>[
+        _body(401, <String, dynamic>{}),
+        _body(401, <String, dynamic>{}),
+        _body(200, <String, dynamic>{'id': 1}),
+        _body(200, <String, dynamic>{'id': 2}),
+      ]);
+
+      final List<Response<dynamic>> results = await Future.wait(
+        <Future<Response<dynamic>>>[
+          dio.get<dynamic>('/things'),
+          dio.get<dynamic>('/things'),
+        ],
+      );
+      expect(results.length, 2);
+      expect(
+        results.every((Response<dynamic> r) => r.statusCode == 200),
+        isTrue,
+      );
+    },
+  );
 }

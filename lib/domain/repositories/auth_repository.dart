@@ -30,6 +30,18 @@ abstract interface class AuthRepository {
   /// thành công phiên về qua [sessionChanged] — method này KHÔNG trả phiên.
   Future<void> signInWithGoogle();
 
+  /// Gửi email đặt lại mật khẩu; link trong email quay về app (redirectTo)
+  /// và mở phiên recovery — app hiện màn đặt mật khẩu mới.
+  Future<void> sendPasswordReset(String email);
+
+  /// Đổi mật khẩu của phiên hiện tại (dùng cho phiên recovery).
+  Future<void> updatePassword(String password);
+
+  /// Phát `true` mỗi khi phiên đến từ link "Quên mật khẩu" (event
+  /// passwordRecovery của Supabase) — AuthGate dựa vào đây để hiện màn đặt
+  /// mật khẩu mới thay vì vào app chính.
+  Stream<bool> get passwordRecoveryChanged;
+
   /// Làm mới access token (gọi khi 401). SDK tự lo refresh token bên dưới.
   Future<AuthSession> refreshSession();
 
