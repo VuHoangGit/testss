@@ -12,6 +12,8 @@ class DocumentItemModel extends DocumentItem {
     required super.createdAt,
     super.folderId,
     super.pageCount,
+    super.isFavorite,
+    super.lastOpenedAt,
   });
 
   factory DocumentItemModel.fromJson(Map<String, dynamic> json) {
@@ -22,6 +24,10 @@ class DocumentItemModel extends DocumentItem {
       sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
       pageCount: (json['page_count'] as num?)?.toInt(),
       folderId: json['folder_id'] as String?,
+      isFavorite: (json['is_favorite'] as bool?) ?? false,
+      lastOpenedAt: json['last_opened_at'] == null
+          ? null
+          : DateTime.parse(json['last_opened_at'] as String),
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

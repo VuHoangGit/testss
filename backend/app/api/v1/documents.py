@@ -3,6 +3,7 @@
 """
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -16,6 +17,7 @@ from app.models.folder import Folder
 from app.models.permission import Permission
 from app.schemas.documents import (
     DocumentOut,
+    FavoriteRequest,
     MergeRequest,
     ProtectRequest,
     SplitRequest,
@@ -65,13 +67,34 @@ def list_documents(
     db: DbSession,
     current: CurrentUser,
     folder_id: uuid.UUID | None = None,
+    search: str = "",
+    favorites_only: bool = False,
+    sort: str = "created",
 ) -> list[DocumentOut]:
-    """Danh sách tài liệu của user; truy vấn `folder_id` để lọc theo thư mục."""
+    """Danh sách tài liệu của user.
+
+    - `folder_id`: lọc theo thư mục.
+    - `search`: tìm gần đúng theo tên file (LIKE, không phân biệt hoa thường).
+    - `favorites_only`: chỉ file đã gắn sao (TOOLS → Favorites).
+    - `sort`: `created` (mới tải lên trước) hoặc `recent` (mở gần nhất trước,
+      file chưa từng mở xếp cuối — TOOLS → Recent).
+    """
     user = current
     stmt = select(Document).where(Document.owner_id == user.id)
     if folder_id is not None:
         stmt = stmt.where(Document.folder_id == folder_id)
-    return list(db.scalars(stmt.order_by(Document.created_at.desc())))
+    if search.strip():
+        stmt = stmt.where(Document.original_name.ilike(f"%{search.strip()}%"))
+    if favorites_only:
+        stmt = stmt.where(Document.is_favorite.is_(True))
+    if sort == "recent":
+        # `IS NULL` = true trong SQLite → đẩy file chưa mở xuống cuối
+        stmt = stmt.order_by(
+            Document.last_opened_at.is_(None), Document.last_opened_at.desc()
+        )
+    else:
+        stmt = stmt.order_by(Document.created_at.desc())
+    return list(db.scalars(stmt))
 
 
 @router.post("", response_model=DocumentOut, status_code=201)
@@ -114,6 +137,33 @@ async def upload_document(
     db.add(doc)
     db.flush()
     db.add(Permission(document_id=doc.id, user_id=user.id, role="owner"))
+    db.commit()
+    return DocumentOut.model_validate(doc)
+
+
+@router.patch("/{document_id}/favorite", response_model=DocumentOut)
+def set_favorite(
+    document_id: uuid.UUID,
+    body: FavoriteRequest,
+    db: DbSession,
+    current: CurrentUser,
+) -> DocumentOut:
+    """Gắn/gỡ sao tài liệu (TOOLS → Favorites)."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    doc.is_favorite = body.favorite
+    db.commit()
+    return DocumentOut.model_validate(doc)
+
+
+@router.post("/{document_id}/open", response_model=DocumentOut)
+def mark_opened(
+    document_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> DocumentOut:
+    """Đánh dấu tài liệu vừa được mở — cập nhật `last_opened_at` cho Recent."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    doc.last_opened_at = datetime.now(UTC)
     db.commit()
     return DocumentOut.model_validate(doc)
 

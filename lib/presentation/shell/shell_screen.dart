@@ -1,12 +1,19 @@
 /// Main application shell: Overview / Files / AI Center / Account.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/document_entities.dart';
 import '../../domain/entities/user.dart';
-import '../documents/documents_screen.dart';
+import '../ai/ai_providers.dart';
 import '../ai/ai_screen.dart';
+import '../documents/documents_controller.dart';
+import '../documents/documents_providers.dart';
+import '../documents/documents_screen.dart';
+import '../documents/viewer_opener.dart';
 import '../voice/voice_panel.dart';
 import 'account_tab.dart';
 import 'dashboard_tab.dart';
@@ -23,6 +30,14 @@ class ShellScreen extends ConsumerStatefulWidget {
 }
 
 class _ShellScreenState extends ConsumerState<ShellScreen> {
+  /// TOOLS → Recent/Favorites: sang tab Files và bật bộ lọc tương ứng.
+  void _openDocumentsView(DocumentsViewFilter filter) {
+    ref.read(shellTabProvider.notifier).setTab(1);
+    unawaited(
+      ref.read(documentsControllerProvider.notifier).setViewFilter(filter),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final int index = ref.watch(shellTabProvider);
@@ -51,6 +66,7 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
               index: index,
               destinations: destinations,
               onSelected: tabController.setTab,
+              onOpenView: _openDocumentsView,
               email: widget.session.user.email,
             ),
           Expanded(
@@ -83,22 +99,28 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
   }
 }
 
-class _DesktopSidebar extends StatelessWidget {
+class _DesktopSidebar extends ConsumerWidget {
   const _DesktopSidebar({
     required this.index,
     required this.destinations,
     required this.onSelected,
+    required this.onOpenView,
     required this.email,
   });
 
   final int index;
   final List<(String, IconData)> destinations;
   final ValueChanged<int> onSelected;
+  final ValueChanged<DocumentsViewFilter> onOpenView;
   final String email;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final ColorScheme colors = Theme.of(context).colorScheme;
+    // null-safe: provider lỗi mạng vẫn highlight đúng mặc định All
+    final DocumentsViewFilter viewFilter =
+        ref.watch(documentsControllerProvider).value?.viewFilter ??
+        DocumentsViewFilter.all;
     return Container(
       width: 248,
       decoration: BoxDecoration(
@@ -151,12 +173,15 @@ class _DesktopSidebar extends StatelessWidget {
             _NavItem(
               title: 'Recent',
               icon: Icons.schedule_outlined,
-              onTap: () => onSelected(1),
+              selected: index == 1 && viewFilter == DocumentsViewFilter.recent,
+              onTap: () => onOpenView(DocumentsViewFilter.recent),
             ),
             _NavItem(
               title: 'Favorites',
               icon: Icons.star_outline_rounded,
-              onTap: () => onSelected(1),
+              selected:
+                  index == 1 && viewFilter == DocumentsViewFilter.favorites,
+              onTap: () => onOpenView(DocumentsViewFilter.favorites),
             ),
             const Spacer(),
             Container(
@@ -260,81 +285,291 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _TopBar extends StatelessWidget {
+/// Topbar với ô search: gõ ≥ 2 ký tự (debounce 300ms) → gọi API tìm theo tên,
+/// dropdown tối đa 8 kết quả dưới ô; chọn kết quả = đánh dấu đã mở + mở viewer.
+class _TopBar extends ConsumerStatefulWidget {
   const _TopBar({required this.title, required this.userEmail});
   final String title;
   final String userEmail;
 
   @override
+  ConsumerState<_TopBar> createState() => _TopBarState();
+}
+
+class _TopBarState extends ConsumerState<_TopBar> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  final LayerLink _layerLink = LayerLink();
+  final OverlayPortalController _overlayController = OverlayPortalController();
+  Timer? _debounce;
+  List<DocumentItem> _results = const <DocumentItem>[];
+  bool _searching = false;
+  bool _expandedCompactSearch = false;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _hideOverlay() {
+    if (_overlayController.isShowing) {
+      _overlayController.hide();
+    }
+  }
+
+  void _onQueryChanged(String query) {
+    _debounce?.cancel();
+    final String q = query.trim();
+    if (q.length < 2) {
+      if (mounted) {
+        setState(() => _results = const <DocumentItem>[]);
+      }
+      _hideOverlay();
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 300), () => _runSearch(q));
+  }
+
+  Future<void> _runSearch(String query) async {
+    setState(() => _searching = true);
+    try {
+      final List<DocumentItem> docs = await ref
+          .read(documentsRepositoryProvider)
+          .listDocuments(search: query);
+      if (!mounted) return;
+      setState(() {
+        _searching = false;
+        _results = docs.take(8).toList(growable: false);
+      });
+      _overlayController.show();
+    } on Exception {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _openResult(DocumentItem doc) async {
+    _hideOverlay();
+    _focusNode.unfocus();
+    _searchController.clear();
+    setState(() {
+      _results = const <DocumentItem>[];
+      _expandedCompactSearch = false;
+    });
+    // Đánh dấu đã mở (feed Recent) — không chặn việc mở viewer
+    unawaited(
+      ref.read(documentsControllerProvider.notifier).markOpened(doc.id),
+    );
+    try {
+      await openDocumentViewer(
+        repository: ref.read(documentsRepositoryProvider),
+        aiRepository: ref.read(aiRepositoryProvider),
+        doc: doc,
+      );
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  Widget _buildField(BuildContext context, {required bool compactField}) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: TextField(
+        controller: _searchController,
+        focusNode: _focusNode,
+        onChanged: _onQueryChanged,
+        decoration: InputDecoration(
+          hintText: 'Search documents...',
+          prefixIcon: const Icon(Icons.search, size: 19),
+          suffixIcon: _searching
+              ? const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : null,
+          isDense: true,
+          filled: true,
+          fillColor: colors.surfaceContainerHighest,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bool compact = MediaQuery.sizeOf(context).width < 760;
     final ColorScheme colors = Theme.of(context).colorScheme;
-    return Container(
-      // Topbar 72px desktop (spec); mobile hạ còn 64px cho nội dung nhiều chỗ hơn
-      height: compact ? 64 : 72,
-      padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 28),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
-      ),
-      child: Row(
-        children: <Widget>[
-          Expanded(
-            child: Text(
-              title,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          // Search thu gọn thành icon khi màn hẹp — tránh overflow
-          if (compact)
+    return OverlayPortal(
+      controller: _overlayController,
+      overlayChildBuilder: (BuildContext ctx) =>
+          _buildSearchOverlay(ctx, compact: compact),
+      child: Container(
+        // Topbar 72px desktop (spec); mobile hạ còn 64px cho nội dung nhiều chỗ hơn
+        height: compact ? 64 : 72,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 16 : 28),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+        ),
+        child: Row(
+          children: <Widget>[
+            if (compact && !_expandedCompactSearch) ...<Widget>[
+              Expanded(
+                child: Text(
+                  widget.title,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+            // Search: desktop luôn hiện ô 320px; mobile bung từ icon (ánh xạ dropdown neo phải)
+            if (!compact)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: 320,
+                  height: 40,
+                  child: _buildField(context, compactField: false),
+                ),
+              )
+            else if (_expandedCompactSearch)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    height: 40,
+                    child: _buildField(context, compactField: true),
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                onPressed: () => setState(() => _expandedCompactSearch = true),
+                icon: const Icon(Icons.search),
+                tooltip: 'Search documents',
+              ),
+            const VoiceMicButton(),
+            const ThemeToggleButton(),
             IconButton(
               onPressed: () {},
-              icon: const Icon(Icons.search),
-              tooltip: 'Search documents',
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: SizedBox(
-                width: 320,
-                height: 40,
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search documents...',
-                    prefixIcon: const Icon(Icons.search, size: 19),
-                    isDense: true,
-                    filled: true,
-                    fillColor: colors.surfaceContainerHighest,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
+              icon: const Icon(Icons.notifications_none_rounded),
+              tooltip: 'Notifications',
+            ),
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: colors.primaryContainer,
+              child: Text(
+                widget.userEmail.isEmpty
+                    ? '?'
+                    : widget.userEmail[0].toUpperCase(),
+                style: TextStyle(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          const VoiceMicButton(),
-          const ThemeToggleButton(),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
-            tooltip: 'Notifications',
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Nội dung overlay dropdown kết quả search (neo dưới ô tìm kiếm).
+  Widget _buildSearchOverlay(BuildContext context, {required bool compact}) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Stack(
+      children: <Widget>[
+        // Barrier: chạm ra ngoài dropdown để đóng
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              _hideOverlay();
+              _focusNode.unfocus();
+            },
           ),
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: colors.primaryContainer,
-            child: Text(
-              userEmail.isEmpty ? '?' : userEmail[0].toUpperCase(),
-              style: TextStyle(
-                color: colors.primary,
-                fontWeight: FontWeight.w700,
+        ),
+        CompositedTransformFollower(
+          link: _layerLink,
+          targetAnchor: Alignment.bottomLeft,
+          followerAnchor: compact ? Alignment.topRight : Alignment.topLeft,
+          showWhenUnlinked: false,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(12),
+              color: colors.surface,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 360,
+                  maxHeight: 380,
+                ),
+                child: _results.isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('No documents found'),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _results.length,
+                        itemBuilder: (BuildContext itemCtx, int i) {
+                          final DocumentItem doc = _results[i];
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              doc.isPdf
+                                  ? Icons.picture_as_pdf
+                                  : doc.isImage
+                                  ? Icons.image_outlined
+                                  : Icons.description_outlined,
+                              size: 20,
+                              color: doc.isPdf ? colors.error : colors.primary,
+                            ),
+                            title: Text(
+                              doc.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              doc.lastOpenedAt == null
+                                  ? 'Not opened yet'
+                                  : 'Opened ${_relativeTime(doc.lastOpenedAt!)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            onTap: () => _openResult(doc),
+                          );
+                        },
+                      ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
+  }
+
+  static String _relativeTime(DateTime time) {
+    final Duration diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
   }
 }

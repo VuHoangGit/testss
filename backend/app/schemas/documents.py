@@ -27,7 +27,13 @@ class DocumentOut(BaseModel):
     mime_type: str
     size_bytes: int
     page_count: int | None = None
+    is_favorite: bool = False
+    last_opened_at: datetime | None = None
     created_at: datetime
+
+
+class FavoriteRequest(BaseModel):
+    favorite: bool
 
 
 class MergeRequest(BaseModel):

@@ -48,8 +48,22 @@ class _FakeDocumentsRepository implements DocumentsRepository {
   );
 
   @override
-  Future<List<DocumentItem>> listDocuments({String? folderId}) async =>
-      <DocumentItem>[_sample];
+  Future<List<DocumentItem>> listDocuments({
+    String? folderId,
+    String? search,
+    bool favoritesOnly = false,
+    DocumentsSort sort = DocumentsSort.created,
+  }) async => <DocumentItem>[_sample];
+
+  @override
+  Future<DocumentItem> setFavorite(
+    String documentId, {
+    required bool favorite,
+  }) async => _sample.copyWith(isFavorite: favorite);
+
+  @override
+  Future<DocumentItem> markOpened(String documentId) async =>
+      _sample.copyWith(lastOpenedAt: DateTime.fromMillisecondsSinceEpoch(1));
 
   @override
   Future<DocumentItem> protectDocument(

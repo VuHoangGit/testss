@@ -1,6 +1,8 @@
 /// Files tab: folders, uploads, downloads, and PDF tools.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,7 @@ import '../../domain/entities/document_entities.dart';
 import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
+import 'upload_flow.dart';
 import 'viewer_opener.dart';
 
 class DocumentsScreen extends ConsumerStatefulWidget {
@@ -97,58 +100,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Future<void> _upload() async {
-    final String? folderId = ref
-        .read(documentsControllerProvider)
-        .value
-        ?.selectedFolderId;
-    final ValueNotifier<double> progress = ValueNotifier<double>(0);
-    bool dialogClosed = false;
-    void closeDialog() {
-      if (!dialogClosed && mounted) {
-        dialogClosed = true;
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-    }
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext ctx) => PopScope<void>(
-        canPop: false,
-        child: AlertDialog(
-          title: const Text('Uploading…'),
-          content: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, double v, _) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                LinearProgressIndicator(value: v <= 0 ? null : v),
-                const SizedBox(height: 8),
-                Text(
-                  v <= 0 ? 'Preparing…' : '${(v * 100).toStringAsFixed(0)}%',
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    final DocumentsController notifier = ref.read(
-      documentsControllerProvider.notifier,
-    );
-    try {
-      final String? name = await notifier.pickAndUpload(
-        folderId: folderId,
-        onProgress: (int sent, int total) {
-          if (total > 0) progress.value = sent / total;
-        },
-      );
-      if (name != null) _showSnack('Đã tải lên "$name"');
-    } on Exception catch (e) {
-      _showSnack(e.toString());
-    } finally {
-      closeDialog();
-    }
+    await pickAndUploadWithProgress(context, ref);
   }
 
   Future<void> _download(DocumentItem doc) async {
@@ -161,12 +113,23 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Future<void> _openViewer(DocumentItem doc) async {
+    // Đánh dấu đã mở (feed Recent) — không chặn việc mở viewer nếu lỗi
+    unawaited(
+      ref.read(documentsControllerProvider.notifier).markOpened(doc.id),
+    );
     await _guard(
       () => openDocumentViewer(
         repository: ref.read(documentsRepositoryProvider),
         aiRepository: ref.read(aiRepositoryProvider),
         doc: doc,
       ),
+    );
+  }
+
+  Future<void> _toggleFavorite(DocumentItem doc) async {
+    await _guard(
+      () =>
+          ref.read(documentsControllerProvider.notifier).toggleFavorite(doc.id),
     );
   }
 
@@ -314,6 +277,10 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Widget _buildToolbar(BuildContext context, DocumentsState data) {
+    final DocumentsController notifier = ref.read(
+      documentsControllerProvider.notifier,
+    );
+    final bool filtered = data.viewFilter != DocumentsViewFilter.all;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
       child: Wrap(
@@ -321,6 +288,23 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: <Widget>[
+          if (filtered)
+            InputChip(
+              avatar: Icon(
+                data.viewFilter == DocumentsViewFilter.favorites
+                    ? Icons.star_rounded
+                    : Icons.schedule_rounded,
+                size: 16,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              label: Text(
+                data.viewFilter == DocumentsViewFilter.favorites
+                    ? 'Favorites'
+                    : 'Recent',
+              ),
+              onDeleted: () =>
+                  _guard(() => notifier.setViewFilter(DocumentsViewFilter.all)),
+            ),
           FilledButton.icon(
             onPressed: _upload,
             icon: const Icon(Icons.upload_file),
@@ -417,23 +401,29 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   Widget _buildList(BuildContext context, DocumentsState data) {
     if (data.documents.isEmpty) {
+      final bool favoritesView =
+          data.viewFilter == DocumentsViewFilter.favorites;
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(
-              Icons.folder_open_rounded,
+              favoritesView
+                  ? Icons.star_border_rounded
+                  : Icons.folder_open_rounded,
               size: 44,
               color: Theme.of(context).colorScheme.outline,
             ),
             const SizedBox(height: 12),
             Text(
-              'No documents yet',
+              favoritesView ? 'No favorites yet' : 'No documents yet',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
-              'No documents yet — tap "Upload" to add your first file',
+              favoritesView
+                  ? 'Star a file from its menu to see it here'
+                  : 'No documents yet — tap "Upload" to add your first file',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -457,6 +447,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             selected: data.selection.contains(doc.id),
             onToggleSelect: () => notifier.toggleSelect(doc.id),
             onDownload: () => _download(doc),
+            onToggleFavorite: () => _toggleFavorite(doc),
             onSplit: () => _split(doc),
             onProtect: () => _protect(doc, removing: false),
             onUnprotect: () => _protect(doc, removing: true),
@@ -559,6 +550,7 @@ class _DocumentTile extends StatelessWidget {
     required this.selected,
     required this.onToggleSelect,
     required this.onDownload,
+    required this.onToggleFavorite,
     required this.onSplit,
     required this.onProtect,
     required this.onUnprotect,
@@ -571,6 +563,7 @@ class _DocumentTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onToggleSelect;
   final VoidCallback onDownload;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onSplit;
   final VoidCallback onProtect;
   final VoidCallback onUnprotect;
@@ -648,13 +641,29 @@ class _DocumentTile extends StatelessWidget {
                     value: selected,
                     onChanged: (bool? _) => onToggleSelect(),
                   )
-                else
+                else ...<Widget>[
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: doc.isFavorite ? 'Unfavorite' : 'Favorite',
+                    onPressed: onToggleFavorite,
+                    icon: Icon(
+                      doc.isFavorite
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      size: 22,
+                      color: doc.isFavorite
+                          ? Colors.amber
+                          : colors.onSurfaceVariant,
+                    ),
+                  ),
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert, color: colors.onSurfaceVariant),
                     onSelected: (String action) {
                       switch (action) {
                         case 'download':
                           onDownload();
+                        case 'favorite':
+                          onToggleFavorite();
                         case 'split':
                           onSplit();
                         case 'protect':
@@ -669,6 +678,10 @@ class _DocumentTile extends StatelessWidget {
                       const PopupMenuItem<String>(
                         value: 'download',
                         child: Text('Download'),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'favorite',
+                        child: Text(doc.isFavorite ? 'Unfavorite' : 'Favorite'),
                       ),
                       const PopupMenuItem<String>(
                         value: 'split',
@@ -692,6 +705,7 @@ class _DocumentTile extends StatelessWidget {
                       ),
                     ],
                   ),
+                ],
               ],
             ),
           ),

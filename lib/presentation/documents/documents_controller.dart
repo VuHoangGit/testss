@@ -14,6 +14,18 @@ import '../../domain/entities/document_entities.dart';
 import '../../domain/repositories/documents_repository.dart';
 import 'documents_providers.dart';
 
+/// Bộ lọc khung nhìn đang chọn ở tab Files (TOOLS → Recent/Favorites).
+enum DocumentsViewFilter {
+  /// Toàn bộ file trong thư mục đang chọn (mặc định).
+  all,
+
+  /// Chỉ file đã gắn sao.
+  favorites,
+
+  /// Xếp theo lần mở gần nhất.
+  recent,
+}
+
 class DocumentsState {
   const DocumentsState({
     this.folders = const <DocumentFolder>[],
@@ -21,6 +33,7 @@ class DocumentsState {
     this.selectedFolderId,
     this.selectionMode = false,
     this.selection = const <String>{},
+    this.viewFilter = DocumentsViewFilter.all,
   });
 
   final List<DocumentFolder> folders;
@@ -28,6 +41,7 @@ class DocumentsState {
   final String? selectedFolderId;
   final bool selectionMode;
   final Set<String> selection;
+  final DocumentsViewFilter viewFilter;
 
   DocumentsState copyWith({
     List<DocumentFolder>? folders,
@@ -35,6 +49,7 @@ class DocumentsState {
     String? selectedFolderId,
     bool? selectionMode,
     Set<String>? selection,
+    DocumentsViewFilter? viewFilter,
   }) {
     return DocumentsState(
       folders: folders ?? this.folders,
@@ -42,6 +57,7 @@ class DocumentsState {
       selectedFolderId: selectedFolderId ?? this.selectedFolderId,
       selectionMode: selectionMode ?? this.selectionMode,
       selection: selection ?? this.selection,
+      viewFilter: viewFilter ?? this.viewFilter,
     );
   }
 }
@@ -56,22 +72,91 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     return DocumentsState(folders: folders, documents: docs);
   }
 
+  /// Danh sách theo trạng thái hiện tại (folder + bộ lọc Recent/Favorites).
+  Future<List<DocumentItem>> _fetch(DocumentsState current) =>
+      _repo.listDocuments(
+        // Favorites/Recent là khung nhìn toàn kho, không ghép folder
+        folderId: current.viewFilter == DocumentsViewFilter.all
+            ? current.selectedFolderId
+            : null,
+        favoritesOnly: current.viewFilter == DocumentsViewFilter.favorites,
+        sort: current.viewFilter == DocumentsViewFilter.recent
+            ? DocumentsSort.recent
+            : DocumentsSort.created,
+      );
+
   Future<void> _reload() async {
     final DocumentsState current = state.value ?? const DocumentsState();
-    final List<DocumentItem> docs = await _repo.listDocuments(
-      folderId: current.selectedFolderId,
-    );
+    final List<DocumentItem> docs = await _fetch(current);
     state = AsyncData(current.copyWith(documents: docs));
   }
 
   Future<void> selectFolder(String? folderId) async {
     final DocumentsState current = state.value ?? const DocumentsState();
-    final List<DocumentItem> docs = await _repo.listDocuments(
-      folderId: folderId,
+    // Chọn folder = rời khung nhìn Recent/Favorites về All
+    final DocumentsState next = current.copyWith(
+      selectedFolderId: folderId,
+      viewFilter: DocumentsViewFilter.all,
     );
-    state = AsyncData(
-      current.copyWith(selectedFolderId: folderId, documents: docs),
+    final List<DocumentItem> docs = await _fetch(next);
+    state = AsyncData(next.copyWith(documents: docs));
+  }
+
+  /// Mở khung nhìn TOOLS (Recent/Favorites) — tải lại danh sách tương ứng.
+  Future<void> setViewFilter(DocumentsViewFilter filter) async {
+    if (filter == (state.value?.viewFilter ?? DocumentsViewFilter.all)) {
+      return;
+    }
+    final DocumentsState current = state.value ?? const DocumentsState();
+    final DocumentsState next = current.copyWith(viewFilter: filter);
+    final List<DocumentItem> docs = await _fetch(next);
+    state = AsyncData(next.copyWith(documents: docs));
+  }
+
+  /// Gắn/gỡ sao: optimistic UI, rollback nếu server lỗi. Đang xem
+  /// Favorites mà gỡ sao thì bỏ file khỏi danh sách.
+  Future<void> toggleFavorite(String documentId) async {
+    final DocumentsState current = state.value ?? const DocumentsState();
+    final int index = current.documents.indexWhere(
+      (DocumentItem d) => d.id == documentId,
     );
+    if (index < 0) return;
+    final DocumentItem old = current.documents[index];
+    final DocumentItem optimistic = old.copyWith(isFavorite: !old.isFavorite);
+    final List<DocumentItem> updated = List<DocumentItem>.of(current.documents);
+    updated[index] = optimistic;
+    state = AsyncData(current.copyWith(documents: updated));
+    try {
+      await _repo.setFavorite(documentId, favorite: !old.isFavorite);
+    } on Exception {
+      state = AsyncData(current.copyWith(documents: current.documents));
+      rethrow;
+    }
+    if (optimistic.isFavorite == false &&
+        current.viewFilter == DocumentsViewFilter.favorites) {
+      // Gỡ sao trong khung nhìn Favorites → file rời khỏi danh sách
+      await _reload();
+    }
+  }
+
+  /// Đánh dấu vừa mở file (feed Recent). Cập nhật item trong state để
+  /// dashboard đổi thứ tự ngay mà không cần reload.
+  Future<void> markOpened(String documentId) async {
+    final DocumentsState current = state.value ?? const DocumentsState();
+    final int index = current.documents.indexWhere(
+      (DocumentItem d) => d.id == documentId,
+    );
+    if (index < 0) return;
+    try {
+      final DocumentItem fresh = await _repo.markOpened(documentId);
+      final List<DocumentItem> updated = List<DocumentItem>.of(
+        current.documents,
+      );
+      updated[index] = fresh;
+      state = AsyncData((state.value ?? current).copyWith(documents: updated));
+    } on Exception {
+      // Chỉ là metadata Recent — mở file không nên văng lỗi vì đánh dấu
+    }
   }
 
   Future<void> createFolder(String name) async {
@@ -86,16 +171,11 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     final DocumentsState current = state.value ?? const DocumentsState();
     final List<DocumentFolder> folders = await _repo.listFolders();
     final bool wasSelected = current.selectedFolderId == folderId;
-    final List<DocumentItem> docs = await _repo.listDocuments(
-      folderId: wasSelected ? null : current.selectedFolderId,
+    final DocumentsState next = current.copyWith(
+      selectedFolderId: wasSelected ? null : current.selectedFolderId,
     );
-    state = AsyncData(
-      current.copyWith(
-        folders: folders,
-        documents: docs,
-        selectedFolderId: wasSelected ? null : current.selectedFolderId,
-      ),
-    );
+    final List<DocumentItem> docs = await _fetch(next);
+    state = AsyncData(next.copyWith(folders: folders, documents: docs));
   }
 
   /// Mở file picker, đọc bytes và upload. Trả về tên file đã tải lên

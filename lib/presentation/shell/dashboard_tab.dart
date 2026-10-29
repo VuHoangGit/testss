@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,7 +7,10 @@ import '../../core/theme/app_theme.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/entities/document_entities.dart';
 import '../ai/ai_providers.dart';
+import '../documents/documents_controller.dart';
 import '../documents/documents_providers.dart';
+import '../documents/upload_flow.dart';
+import '../documents/viewer_opener.dart';
 import 'shell_providers.dart';
 
 class DashboardTab extends ConsumerWidget {
@@ -18,7 +23,19 @@ class DashboardTab extends ConsumerWidget {
     final List<DocumentItem> documents =
         ref.watch(documentsControllerProvider).value?.documents ??
         const <DocumentItem>[];
-    final List<DocumentItem> recent = documents.take(5).toList();
+    // Recent = mở gần nhất trước; file chưa mở giữ thứ tự mới tải lên, xếp sau
+    final List<DocumentItem> recent = List<DocumentItem>.of(documents)
+      ..sort((DocumentItem a, DocumentItem b) {
+        final DateTime? aTime = a.lastOpenedAt;
+        final DateTime? bTime = b.lastOpenedAt;
+        if (aTime == null && bTime == null) return 0;
+        if (aTime == null) return 1;
+        if (bTime == null) return -1;
+        return bTime.compareTo(aTime);
+      });
+    final List<DocumentItem> recentDocs = recent
+        .take(5)
+        .toList(growable: false);
     final int totalBytes = documents.fold(
       0,
       (int sum, DocumentItem d) => sum + d.sizeBytes,
@@ -61,7 +78,8 @@ class DashboardTab extends ConsumerWidget {
               ),
             ),
             FilledButton.icon(
-              onPressed: () => ref.read(shellTabProvider.notifier).setTab(1),
+              // Mở file picker ngay (không chỉ chuyển tab)
+              onPressed: () => pickAndUploadWithProgress(context, ref),
               icon: const Icon(Icons.upload_file_outlined, size: 18),
               label: const Text('Upload document'),
             ),
@@ -164,7 +182,8 @@ class DashboardTab extends ConsumerWidget {
                         shellTabProvider.notifier,
                       );
                       if (index == 0) {
-                        tabs.setTab(1);
+                        // Upload: mở file picker ngay tại dashboard
+                        unawaited(pickAndUploadWithProgress(context, ref));
                       } else {
                         // Scan → OCR, Ask AI → Chat: mở đúng công cụ trong AI Center
                         tabs.setTab(2);
@@ -217,13 +236,21 @@ class DashboardTab extends ConsumerWidget {
               ),
             ),
             TextButton(
-              onPressed: () => ref.read(shellTabProvider.notifier).setTab(1),
+              // Xem toàn bộ ở Files với bộ lọc Recent đang bật
+              onPressed: () {
+                ref.read(shellTabProvider.notifier).setTab(1);
+                unawaited(
+                  ref
+                      .read(documentsControllerProvider.notifier)
+                      .setViewFilter(DocumentsViewFilter.recent),
+                );
+              },
               child: const Text('View all'),
             ),
           ],
         ),
         const SizedBox(height: 4),
-        if (recent.isEmpty)
+        if (recentDocs.isEmpty)
           Card(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
@@ -250,7 +277,7 @@ class DashboardTab extends ConsumerWidget {
             ),
           )
         else
-          for (final DocumentItem doc in recent)
+          for (final DocumentItem doc in recentDocs)
             Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
@@ -261,13 +288,59 @@ class DashboardTab extends ConsumerWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                subtitle: Text(_size(doc.sizeBytes)),
-                trailing: const Icon(Icons.chevron_right, size: 20),
-                onTap: () => ref.read(shellTabProvider.notifier).setTab(1),
+                subtitle: Text(
+                  doc.lastOpenedAt == null
+                      ? _size(doc.sizeBytes)
+                      : 'Opened ${_relativeTime(doc.lastOpenedAt!)} · ${_size(doc.sizeBytes)}',
+                ),
+                trailing: doc.isFavorite
+                    ? const Icon(
+                        Icons.star_rounded,
+                        size: 18,
+                        color: Colors.amber,
+                      )
+                    : const Icon(Icons.chevron_right, size: 20),
+                // Mở viewer trực tiếp từ dashboard + đánh dấu đã mở (Recent)
+                onTap: () {
+                  unawaited(
+                    ref
+                        .read(documentsControllerProvider.notifier)
+                        .markOpened(doc.id),
+                  );
+                  unawaited(_openViewer(context, ref, doc));
+                },
               ),
             ),
       ],
     );
+  }
+
+  Future<void> _openViewer(
+    BuildContext context,
+    WidgetRef ref,
+    DocumentItem doc,
+  ) async {
+    try {
+      await openDocumentViewer(
+        repository: ref.read(documentsRepositoryProvider),
+        aiRepository: ref.read(aiRepositoryProvider),
+        doc: doc,
+      );
+    } on Exception catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.toString())));
+      }
+    }
+  }
+
+  static String _relativeTime(DateTime time) {
+    final Duration diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes} min ago';
+    if (diff.inDays < 1) return '${diff.inHours} h ago';
+    return '${diff.inDays} d ago';
   }
 
   String get _initial =>

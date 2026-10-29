@@ -58,13 +58,22 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
   }
 
   @override
-  Future<List<DocumentItem>> listDocuments({String? folderId}) async {
+  Future<List<DocumentItem>> listDocuments({
+    String? folderId,
+    String? search,
+    bool favoritesOnly = false,
+    DocumentsSort sort = DocumentsSort.created,
+  }) async {
+    final Map<String, String> query = <String, String>{
+      'folder_id': ?folderId,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (favoritesOnly) 'favorites_only': 'true',
+      if (sort == DocumentsSort.recent) 'sort': 'recent',
+    };
     try {
       final Response<dynamic> res = await dio.get<dynamic>(
         '/documents',
-        queryParameters: folderId == null
-            ? null
-            : <String, String>{'folder_id': folderId},
+        queryParameters: query.isEmpty ? null : query,
       );
       final List<dynamic> items =
           (res.data as List<dynamic>? ?? const <dynamic>[]);
@@ -76,6 +85,34 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
           .toList(growable: false);
     } on DioException catch (e) {
       throw mapDioException(e, fallback: 'Không tải được tài liệu');
+    }
+  }
+
+  @override
+  Future<DocumentItem> setFavorite(
+    String documentId, {
+    required bool favorite,
+  }) async {
+    try {
+      final Response<dynamic> res = await dio.patch<dynamic>(
+        '/documents/$documentId/favorite',
+        data: <String, bool>{'favorite': favorite},
+      );
+      return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Không cập nhật được đánh dấu sao');
+    }
+  }
+
+  @override
+  Future<DocumentItem> markOpened(String documentId) async {
+    try {
+      final Response<dynamic> res = await dio.post<dynamic>(
+        '/documents/$documentId/open',
+      );
+      return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Không đánh dấu được tài liệu đã mở');
     }
   }
 

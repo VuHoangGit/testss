@@ -8,6 +8,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:testss/data/repositories/documents_repository_impl.dart';
+import 'package:testss/domain/entities/document_entities.dart';
+import 'package:testss/domain/repositories/documents_repository.dart';
 
 class _MockAdapter extends Mock implements HttpClientAdapter {}
 
@@ -67,6 +69,79 @@ void main() {
       await repo.listDocuments(folderId: 'abc');
       expect(captured!.path, '/documents');
       expect(captured!.queryParameters['folder_id'], 'abc');
+    });
+
+    test('favorites + recent + search gửi đúng query', () async {
+      RequestOptions? captured;
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer((inv) async {
+        captured = inv.positionalArguments[0] as RequestOptions;
+        return jsonBody(<Map<String, dynamic>>[]);
+      });
+      await repo.listDocuments(
+        search: 'hop dong',
+        favoritesOnly: true,
+        sort: DocumentsSort.recent,
+      );
+      expect(captured!.queryParameters['search'], 'hop dong');
+      expect(captured!.queryParameters['favorites_only'], 'true');
+      expect(captured!.queryParameters['sort'], 'recent');
+      expect(captured!.queryParameters.containsKey('folder_id'), isFalse);
+    });
+
+    test('parse is_favorite/last_opened_at từ JSON', () async {
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer(
+        (_) async => jsonBody(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'd9',
+            'original_name': 'yeu-thich.pdf',
+            'mime_type': 'application/pdf',
+            'size_bytes': 10,
+            'is_favorite': true,
+            'last_opened_at': '2026-10-28T01:02:03Z',
+            'created_at': '2026-10-12T00:00:00Z',
+          },
+        ]),
+      );
+      final List<DocumentItem> docs = await repo.listDocuments();
+      expect(docs.first.isFavorite, isTrue);
+      expect(docs.first.lastOpenedAt, DateTime.parse('2026-10-28T01:02:03Z'));
+    });
+  });
+
+  group('favorite & open', () {
+    Map<String, dynamic> docJson() => <String, dynamic>{
+      'id': 'd1',
+      'original_name': 'a.pdf',
+      'mime_type': 'application/pdf',
+      'size_bytes': 1,
+      'is_favorite': true,
+      'last_opened_at': '2026-10-28T00:00:01Z',
+      'created_at': '2026-10-12T00:00:00Z',
+    };
+
+    test('setFavorite PATCH /documents/{id}/favorite với body', () async {
+      RequestOptions? captured;
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer((inv) async {
+        captured = inv.positionalArguments[0] as RequestOptions;
+        return jsonBody(docJson());
+      });
+      final DocumentItem doc = await repo.setFavorite('d1', favorite: true);
+      expect(captured!.method, 'PATCH');
+      expect(captured!.path, '/documents/d1/favorite');
+      expect(captured!.data, <String, bool>{'favorite': true});
+      expect(doc.isFavorite, isTrue);
+    });
+
+    test('markOpened POST /documents/{id}/open', () async {
+      RequestOptions? captured;
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer((inv) async {
+        captured = inv.positionalArguments[0] as RequestOptions;
+        return jsonBody(docJson());
+      });
+      final DocumentItem doc = await repo.markOpened('d1');
+      expect(captured!.method, 'POST');
+      expect(captured!.path, '/documents/d1/open');
+      expect(doc.lastOpenedAt, isNotNull);
     });
   });
 

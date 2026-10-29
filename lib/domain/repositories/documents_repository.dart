@@ -5,6 +5,15 @@ import 'dart:typed_data';
 
 import '../entities/document_entities.dart';
 
+/// Kiểu sắp xếp danh sách tài liệu (backend `?sort=`).
+enum DocumentsSort {
+  /// Mới tải lên trước (mặc định).
+  created,
+
+  /// Mở gần nhất trước, file chưa từng mở xếp cuối (TOOLS → Recent).
+  recent,
+}
+
 abstract interface class DocumentsRepository {
   Future<List<DocumentFolder>> listFolders();
 
@@ -13,7 +22,21 @@ abstract interface class DocumentsRepository {
   Future<void> deleteFolder(String folderId);
 
   /// [folderId] null = lấy toàn bộ tài liệu của user.
-  Future<List<DocumentItem>> listDocuments({String? folderId});
+  ///
+  /// [search] tìm gần đúng theo tên file; [favoritesOnly] chỉ file đã gắn sao;
+  /// [sort] chọn thứ tự (mặc định theo lần tải lên).
+  Future<List<DocumentItem>> listDocuments({
+    String? folderId,
+    String? search,
+    bool favoritesOnly,
+    DocumentsSort sort,
+  });
+
+  /// Gắn/gỡ sao tài liệu. Trả về bản cập nhật từ server.
+  Future<DocumentItem> setFavorite(String documentId, {required bool favorite});
+
+  /// Đánh dấu vừa mở tài liệu (cập nhật `last_opened_at` cho Recent).
+  Future<DocumentItem> markOpened(String documentId);
 
   /// Upload nội dung file (bytes — chạy được cả web lẫn native).
   Future<DocumentItem> uploadDocument({

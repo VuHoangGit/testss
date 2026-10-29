@@ -10,6 +10,8 @@ class DocumentItem {
     required this.createdAt,
     this.folderId,
     this.pageCount,
+    this.isFavorite = false,
+    this.lastOpenedAt,
   });
 
   final String id;
@@ -19,6 +21,26 @@ class DocumentItem {
   final int? pageCount;
   final String? folderId;
   final DateTime createdAt;
+
+  /// Đã gắn sao (TOOLS → Favorites) — true nếu user đánh dấu từ menu file.
+  final bool isFavorite;
+
+  /// Lần mở gần nhất (TOOLS → Recent); null = chưa từng mở.
+  final DateTime? lastOpenedAt;
+
+  /// Bản sao với vài trường đổi (dùng cho optimistic update sau toggle sao/mở).
+  DocumentItem copyWith({bool? isFavorite, DateTime? lastOpenedAt}) =>
+      DocumentItem(
+        id: id,
+        name: name,
+        mimeType: mimeType,
+        sizeBytes: sizeBytes,
+        createdAt: createdAt,
+        folderId: folderId,
+        pageCount: pageCount,
+        isFavorite: isFavorite ?? this.isFavorite,
+        lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      );
 
   /// Đuôi file văn bản thuần — khớp danh sách backend dùng để trích text
   /// (client-uploader có thể gửi mime `application/octet-stream`).
