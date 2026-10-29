@@ -1,4 +1,7 @@
-from pydantic import BaseModel, Field
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class OCRResult(BaseModel):
@@ -29,3 +32,25 @@ class ChatRequest(BaseModel):
 
 class ChatResult(BaseModel):
     answer: str
+    # Hội thoại chứa vừa lưu câu hỏi + câu trả lời này
+    conversation_id: uuid.UUID
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    document_id: uuid.UUID | None = None
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime

@@ -49,9 +49,8 @@ def test_chat_answers_using_owned_pdf(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "answer": "Sản phẩm tên gì?: Tên sản phẩm: DocuVault"
-    }
+    assert response.json()["answer"] == "Sản phẩm tên gì?: Tên sản phẩm: DocuVault"
+    assert response.json()["conversation_id"]  # UUID của hội thoại vừa tạo
 
 
 def test_chat_rejects_pdf_without_extractable_text(

@@ -1,16 +1,22 @@
-"""OCR, Key-Value, dịch vùng chọn và chatbot tài liệu."""
+"""OCR, Key-Value, dịch vùng chọn, chatbot tài liệu + lưu hội thoại chat."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
+from sqlalchemy import func, select
 
 from app.api.deps import CurrentUser, DbSession
+from app.models.conversation import AiConversation
 from app.models.document import Document
+from app.models.message import AiMessage
 from app.schemas.ai import (
     ChatRequest,
     ChatResult,
+    ConversationOut,
     ExtractTextResult,
+    MessageOut,
     OCRResult,
     TranslationRequest,
     TranslationResult,
@@ -26,6 +32,13 @@ def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
     if document is None or document.owner_id != user_id:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
     return document
+
+
+def _own_conversation(db, conversation_id: uuid.UUID, user_id) -> AiConversation:
+    conversation = db.get(AiConversation, conversation_id)
+    if conversation is None or conversation.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hội thoại")
+    return conversation
 
 
 @router.post("/ocr/{document_id}", response_model=OCRResult)
@@ -112,8 +125,10 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="document_ids không hợp lệ") from exc
     context_parts: list[str] = []
+    documents: list[Document] = []
     for document_id in ids:
         document = _owned_document(db, document_id, user.id)
+        documents.append(document)
         if document.mime_type == "application/pdf":
             text = ai_service.extract_pdf_text(
                 storage_service.read_document_bytes(document.storage_key)
@@ -124,9 +139,92 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
         raise HTTPException(status_code=400, detail="Chọn ít nhất một PDF có nội dung văn bản")
     try:
         answer = ai_service.answer_question("\n\n".join(context_parts), body.question)
-        return ChatResult(answer=answer)
     except ai_service.AIServiceError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    # Lưu hội thoại: gắn với tài liệu đầu tiên, dùng lại hội thoại mới nhất
+    # của tài liệu đó (UI hiện giữ 1 luồng chat/tài liệu). AI lỗi thì KHÔNG
+    # lưu gì (phần trên đã raise trước khi đến đây).
+    primary = documents[0]
+    conversation = db.scalars(
+        select(AiConversation)
+        .where(
+            AiConversation.document_id == primary.id,
+            AiConversation.user_id == user.id,
+        )
+        .order_by(AiConversation.updated_at.desc())
+        .limit(1)
+    ).first()
+    if conversation is None:
+        conversation = AiConversation(
+            user_id=user.id,
+            document_id=primary.id,
+            title=body.question[:255],
+        )
+        db.add(conversation)
+        db.flush()
+    # Câu trả lời lệch 1µs so với câu hỏi → sort theo created_at luôn đúng thứ tự
+    now = datetime.now(UTC)
+    db.add(
+        AiMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=body.question,
+            created_at=now,
+        )
+    )
+    db.add(
+        AiMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=answer,
+            created_at=now + timedelta(microseconds=1),
+        )
+    )
+    conversation.updated_at = func.now()
+    db.commit()
+    return ChatResult(answer=answer, conversation_id=conversation.id)
+
+
+@router.get("/conversations", response_model=list[ConversationOut])
+def list_conversations(
+    db: DbSession,
+    current: CurrentUser,
+    document_id: uuid.UUID | None = None,
+) -> list[ConversationOut]:
+    """Danh sách hội thoại chat của user; `document_id` để lọc theo tài liệu."""
+    user = current
+    stmt = select(AiConversation).where(AiConversation.user_id == user.id)
+    if document_id is not None:
+        document = _owned_document(db, document_id, user.id)
+        stmt = stmt.where(AiConversation.document_id == document.id)
+    return list(db.scalars(stmt.order_by(AiConversation.updated_at.desc())))
+
+
+@router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
+def list_messages(
+    conversation_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> list[MessageOut]:
+    """Tin nhắn của 1 hội thoại theo thứ tự gửi."""
+    user = current
+    conversation = _own_conversation(db, conversation_id, user.id)
+    stmt = (
+        select(AiMessage)
+        .where(AiMessage.conversation_id == conversation.id)
+        .order_by(AiMessage.created_at, AiMessage.id)
+    )
+    return list(db.scalars(stmt))
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> dict[str, str]:
+    user = current
+    conversation = _own_conversation(db, conversation_id, user.id)
+    db.delete(conversation)
+    db.commit()
+    return {"detail": "Đã xóa hội thoại"}
 
 
 @router.post("/voice-command", response_model=VoiceCommandResponse)
