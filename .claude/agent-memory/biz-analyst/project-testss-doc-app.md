@@ -1,18 +1,21 @@
 ---
 name: project-testss-doc-app
-description: Bối cảnh dự án testss — app quản lý tài liệu đa nền tảng (Flutter + backend chưa chốt + PostgreSQL), 6 sprint, Sprint 1 = infra + Google auth; các quyết định đang chờ user chốt
+description: Bối cảnh dự án testss — Doc App (Flutter web + FastAPI), auth đang chuyển từ JWT tự issue sang Supabase Auth + Google provider (backend verify JWKS); các quyết định mở
 metadata:
   type: project
 ---
 
-Dự án thư mục `C:\Users\hoang\Downloads\testss`: app quản lý tài liệu đa nền tảng — Flutter client (Android/iOS/Windows/macOS) + Backend (FastAPI hoặc Node.js, CHƯA chốt) + PostgreSQL + AI (OCR/chatbot ở sprint 3-6).
+Dự án `C:\Users\hoang\Downloads\testss` — "DocuVault": app quản lý tài liệu (upload PDF/ảnh, OCR, dịch, chat AI, voice command). Flutter web (localhost:53123) + backend FastAPI (localhost:8000, port prefix /api/v1). Nguồn requirement gốc là danh sách 6 sprint của khách (không có SRS); docs/analysis-sprint1.md là phân tích Sprint 1 do caller ghi.
 
-**Nguồn requirement duy nhất là danh sách 6 sprint khách đưa — KHÔNG có SRS/technical design trong repo.** Repo đã kiểm chứng (2026-10-12): Flutter template mặc định, chỉ scaffold android/ios/windows, KHÔNG có macos/.
+**Tình trạng auth (kiểm chứng 2026-10-26):**
+- Backend đã hiện thực đầy đủ: /auth/login + /auth/register (email/password, PBKDF2), /auth/google (verify Google id_token), /auth/dev, /auth/refresh (rotation, hash SHA-256 trong bảng user_sessions), /auth/logout, /auth/me. JWT HS256 tự ký (JWT_SECRET, iss=docuvault, claims sub+sid+email/name/picture). deps.get_current_session_and_user check session revoked trong DB mỗi request.
+- Flutter: login email/password chạy thật; nút "Continue with Google" chỉ hiện SnackBar (chưa có client ID). google_sign_in có trong pubspec nhưng KHÔNG import ở đâu (gỡ được không đụng code). DesktopGoogleSignIn (loopback+PKCE cho Windows) viết sẵn, DEFERRED, không wire UI.
 
-Sprint: 1 = khởi tạo + schema users/sessions + Google OAuth2 server-side + JWT + Flutter Clean Architecture + Login + Shell. 2 = kho tài liệu/S3/PDF. 3 = OCR. 4 = table extractor/auto-tag/redaction. 5 = PDF diff. 6 = RAG chatbot (pgvector).
+**Quyết định đã chốt bởi user (2026-10-26): thay toàn bộ auth bằng Supabase Auth**
+- Đăng nhập Google qua Google provider của Supabase. Backend FastAPI giữ nguyên, chỉ đổi verify: JWT tự issue → verify Supabase JWT bằng JWKS.
+- User đã tạo project Supabase + kết nối GitHub Integration (repo VuHoangGit/testss, branch main).
+- Chưa có Google OAuth Client ID/Secret — LƯU Ý: Google provider của Supabase VẪN yêu cầu tự tạo Web OAuth Client trên Google Cloud Console (redirect URI = https://<ref>.supabase.co/auth/v1/callback) rồi nhập vào dashboard Supabase; chỉ là không cần client ID từng nền tảng nhúng trong app nữa.
 
-Phát hiện quan trọng: sprint 1 ghi "google_sign_in cho Desktop" nhưng package này KHÔNG hỗ trợ Windows/Linux; repo desktop = Windows → phải chọn phương án (a) flutter_appauth PKCE, (b) loopback + oauth2, (c) defer.
+**Why:** user muốn bỏ gánh nặng tự quản JWT/refresh/session; Google login chưa từng chạy thật nên không có torniquet khi thay.
 
-**Why:** mọi phân tích nghiệp vụ sau này (Sprint 2+) đều phải quy về danh sách sprint này vì không có nguồn nào khác; các gap đều phải đánh dấu ❓ hỏi user, không bịa.
-
-**How to apply:** trước khi phân tích sprint tiếp theo, đọc lại danh sách sprint trong ngữ cảnh task; các quyết định đã chốt bởi user cần được cập nhật vào memory này. Đến 2026-10-12 còn 7 quyết định chờ chốt: (1) backend FastAPI vs Node.js; (2) PostgreSQL Docker vs native; (3) phương án Windows login; (4) thời hạn JWT access/refresh + rotation; (5) tên app/branding/ngôn ngữ UI; (6) giới hạn domain/whitelist đăng nhập; (7) giới hạn số session/user. Bản phân tích đầy đủ Sprint 1 đã trả về caller dạng text (guard chặn subagent ghi file) — caller phụ trách ghi `docs/analysis-sprint1.md`.
+**How to apply:** mọi phân tích task auth sau này lấy quyết định Supabase làm gốc; các câu hỏi mở còn lại xem báo cáo phân tích ngày 2026-10-26 (đã trả caller): (1) giữ email/password song song qua Supabase hay chỉ Google; (2) migrate dữ liệu user SQLite hay chỉ dữ liệu test; (3) dùng Supabase PostgreSQL làm DB chính luôn không; (4) logout cần revoke tức thì (Admin API) hay chấp nhận token hết hạn tự chết; (5) redirect URLs + CORS cho localhost:53123; (6) chiến lược test backend với JWKS.

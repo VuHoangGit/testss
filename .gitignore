@@ -70,3 +70,4 @@ backend/*.db-journal
 
 # Artifact tạm của Playwright MCP
 /.playwright-mcp/
+TASK-*.md
