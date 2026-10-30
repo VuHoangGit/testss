@@ -13,12 +13,20 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name)
 
-    # CORS: luôn cho phép localhost/127.0.0.1 mọi port (Flutter web dev chạy port
-    # ngẫu nhiên); origin khác chỉ nhận khi khai báo CORS_ORIGINS.
+    # CORS: cho phép localhost/127.0.0.1 mọi port (Flutter web dev chạy port
+    # ngẫu nhiên) và cả IP tư nhân trong LAN (mở app trên điện thoại qua
+    # http://<IP-máy>:port); origin công cộng khác chỉ nhận khi khai báo
+    # CORS_ORIGINS.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_origin_regex=(
+            r"https?://(localhost|127\.0\.0\.1"
+            r"|192\.168\.\d{1,3}\.\d{1,3}"
+            r"|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+            r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})"
+            r"(:\d+)?"
+        ),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

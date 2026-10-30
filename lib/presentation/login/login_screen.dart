@@ -1,9 +1,12 @@
 /// Đăng nhập email/mật khẩu + Google (Supabase Auth).
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/app_config.dart';
+import '../../core/config/server_url_store.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
 
@@ -90,6 +93,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _showSnack('Reset email sent — check your inbox.');
     } on Exception catch (e) {
       _showSnack('$e', isError: true);
+    }
+  }
+
+  /// Host hiện đang dùng (hiện trên nút Server) — từ override hoặc mặc định.
+  static String _currentServerHost() {
+    final Uri uri = Uri.parse(AppConfig.apiBaseUrl);
+    return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+  }
+
+  /// Mở dialog đổi địa chỉ backend. Lưu xong thì reload trang để Dio dựng
+  /// lại với địa chỉ mới (providers giữ Dio suốt phiên).
+  Future<void> _openServerSettings() async {
+    final _ServerDialogResult? result = await showDialog<_ServerDialogResult>(
+      context: context,
+      builder: (BuildContext dialogContext) => _ServerDialog(),
+    );
+    if (result == null) return;
+    if (result.reset) {
+      writeServerUrlOverride(null);
+    } else {
+      writeServerUrlOverride(result.url);
+    }
+    if (!reloadApp()) {
+      // Không reload được (hiếm): vẽ lại nhãn, nhắc khởi động lại app.
+      if (mounted) setState(() {});
+      _showSnack('Saved. Restart the app to apply the new server address.');
     }
   }
 
@@ -314,8 +343,93 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   : 'New to DocuVault? Create an account',
             ),
           ),
+          // Chỉ web: địa chỉ backend được lưu localStorage, đổi IP máy chủ
+          // (vd mở app trên điện thoại qua IP LAN) không cần build lại.
+          if (kIsWeb) ...<Widget>[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: busy ? null : _openServerSettings,
+              icon: const Icon(Icons.dns_outlined, size: 18),
+              label: Text('Server: ${_currentServerHost()}'),
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Kết quả của [_ServerDialog]: `reset` = dùng lại mặc định build-time.
+typedef _ServerDialogResult = ({bool reset, String url});
+
+/// Dialog nhập địa chỉ backend (vd `http://192.168.1.5:8000`). Nhập thiếu
+/// scheme thì tự thêm http://, luôn ghép /api/v1 khi lưu.
+class _ServerDialog extends StatefulWidget {
+  const _ServerDialog();
+
+  @override
+  State<_ServerDialog> createState() => _ServerDialogState();
+}
+
+class _ServerDialogState extends State<_ServerDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: AppConfig.serverUrlOverride ?? AppConfig.defaultApiBaseUrl,
+  );
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    try {
+      final String url = AppConfig.normalizeServerUrl(_controller.text);
+      Navigator.of(context).pop((reset: false, url: url));
+    } on FormatException catch (e) {
+      setState(() => _error = e.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool overridden = AppConfig.serverUrlOverride != null;
+    return AlertDialog(
+      title: const Text('Server address'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            keyboardType: TextInputType.url,
+            onSubmitted: (String _) => _save(),
+            decoration: InputDecoration(
+              labelText: 'Backend address',
+              helperText: 'e.g. http://192.168.1.5:8000 — /api/v1 is added automatically',
+              errorText: _error,
+              prefixIcon: const Icon(Icons.dns_outlined),
+            ),
+          ),
+        ],
+      ),
+      actions: <Widget>[
+        if (overridden)
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop((reset: true, url: '')),
+            child: const Text('Use default'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
