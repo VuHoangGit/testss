@@ -68,13 +68,25 @@ class AppConfig {
   }
 
   /// URL project Supabase (Auth) — Supabase Dashboard → Settings → API.
-  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  /// Ưu tiên dart-define; thiếu thì dùng project dev mặc định để `flutter run`
+  /// không dart-define vẫn chạy được (tránh "No host specified in URI" khi
+  /// đăng nhập). Đổi project khác → truyền SUPABASE_URL như thường.
+  static String get supabaseUrl {
+    const String defined = String.fromEnvironment('SUPABASE_URL');
+    return defined.isNotEmpty
+        ? defined
+        : 'https://coryhhxuexvnqkdgkvtj.supabase.co';
+  }
 
   /// Publishable key của project (public, KHÔNG phải secret key — key secret
-  /// chỉ nằm phía server và app này không dùng).
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-  );
+  /// chỉ nằm phía server và app này không dùng). Tương tự supabaseUrl: có
+  /// sẵn mặc định dev, dart-define đè được.
+  static String get supabaseAnonKey {
+    const String defined = String.fromEnvironment('SUPABASE_ANON_KEY');
+    return defined.isNotEmpty
+        ? defined
+        : 'sb_publishable_xhHfd7VtTUeoiK3gE1dnSQ_Vt-BxRCu';
+  }
 
   /// Origin hiện tại của app — dùng làm đích redirect sau khi OAuth.
   /// Trên web lấy từ URL thanh địa chỉ (đúng cả khi đổi port dev).
