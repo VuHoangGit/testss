@@ -46,8 +46,9 @@ class SupabaseAuthRepository implements AuthRepository {
     required String password,
     String? name,
   }) async {
+    final supabase.AuthResponse res;
     try {
-      await _auth.signUp(
+      res = await _auth.signUp(
         email: email,
         password: password,
         data: <String, dynamic>{
@@ -56,6 +57,15 @@ class SupabaseAuthRepository implements AuthRepository {
       );
     } on supabase.AuthException catch (e) {
       throw _mapAuthError(e);
+    }
+    // Supabase bật "Confirm email": đăng ký xong CHƯA có phiên — phải vào
+    // hộp thư bấm link xác nhận rồi mới đăng nhập được. Ném lỗi riêng để UI
+    // hướng dẫn đúng thay vì "Account created, please sign in" gây hiểu lầm.
+    if (res.session == null) {
+      throw const AuthException(
+        'Đã tạo tài khoản — mở hộp thư và bấm link xác nhận email trước khi đăng nhập',
+        needsEmailConfirmation: true,
+      );
     }
   }
 
@@ -223,6 +233,13 @@ class SupabaseAuthRepository implements AuthRepository {
     if (raw.contains('email not confirmed')) {
       return const AuthException(
         'Chưa xác nhận email — hãy mở hộp thư và bấm link xác nhận',
+        needsEmailConfirmation: true,
+      );
+    }
+    // Gói free của Supabase giới hạn số email gửi mỗi giờ (đăng ký/reset)
+    if (raw.contains('rate limit')) {
+      return const AuthException(
+        'Máy chủ đăng nhập đang giới hạn gửi email — đợi ít phút rồi thử lại',
       );
     }
     if (raw.contains('failed to fetch') || raw.contains('network')) {

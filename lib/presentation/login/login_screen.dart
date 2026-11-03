@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/config/server_url_store.dart';
+import '../../core/error/exceptions.dart';
 import '../auth/auth_controller.dart';
 import '../providers.dart';
 
@@ -127,8 +128,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final AuthController controller = ref.read(authControllerProvider.notifier);
     final String email = _email.text.trim();
     final String password = _password.text;
-    try {
-      if (_registerMode) {
+    if (_registerMode) {
+      try {
         await controller.signUp(
           email: email,
           password: password,
@@ -140,9 +141,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _password.clear();
         });
         _showSnack('Account created successfully. Please sign in.');
-      } else {
-        await controller.signIn(email: email, password: password);
+      } on AuthException catch (e) {
+        // Supabase chờ xác nhận email: tài khoản ĐÃ tạo — vẫn chuyển sang
+        // form đăng nhập nhưng hướng dẫn vào hộp thư trước (không tô đỏ).
+        if (e.needsEmailConfirmation) {
+          setState(() {
+            _registerMode = false;
+            _password.clear();
+          });
+          _showSnack(e.message);
+        } else {
+          _showSnack(e.message, isError: true);
+        }
+      } on Exception catch (e) {
+        _showSnack('$e', isError: true);
       }
+      return;
+    }
+    try {
+      await controller.signIn(email: email, password: password);
     } on Exception catch (e) {
       _showSnack('$e', isError: true);
     }

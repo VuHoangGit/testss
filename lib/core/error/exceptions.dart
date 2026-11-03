@@ -3,9 +3,13 @@ library;
 
 /// Lỗi xác thực (token sai/hết hạn/bị thu hồi) → dẫn tới đăng nhập lại.
 class AuthException implements Exception {
-  const AuthException(this.message);
+  const AuthException(this.message, {this.needsEmailConfirmation = false});
 
   final String message;
+
+  /// true: tài khoản ĐÃ tạo nhưng Supabase chờ bấm link xác nhận trong hộp
+  /// thư — UI hiện hướng dẫn thay vì báo lỗi đỏ.
+  final bool needsEmailConfirmation;
 
   @override
   String toString() => message;
