@@ -1,4 +1,4 @@
-/// Exception tầng data — repository map thành Failure cho presentation.
+/// Exception tầng data — controller bắt và hiển thị message cho người dùng.
 library;
 
 /// Lỗi xác thực (token sai/hết hạn/bị thu hồi) → dẫn tới đăng nhập lại.
