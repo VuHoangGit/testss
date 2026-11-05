@@ -19,8 +19,11 @@ logger = logging.getLogger(__name__)
 # Bỏ I/1/O/0... dễ đọc nhầm khi người dùng gõ nội dung chuyển khoản
 _CODE_ALPHABET = "ABCDEFGHJKLMNPRTUVWXY34679"
 
-# Gói nạp mặc định — seed idempotent theo code, chạy ở startup và migration
+# Gói nạp mặc định — seed idempotent theo code, chạy ở startup và migration.
+# Thứ tự trong list là `sort_order` (hiện từ trên xuống ở màn Mua credit).
 DEFAULT_PACKAGES: list[dict[str, object]] = [
+    # Gói nhỏ nhất: đủ cho 1 lượt gọi AI (50 credit), tiện nạp thử/chuyển khoản thật
+    {"code": "P50", "name": "Gói 50 credit", "price_vnd": 10_000, "credits": 50},
     {"code": "P1000", "name": "Gói 1.000 credit", "price_vnd": 100_000, "credits": 1_000},
     {"code": "P2500", "name": "Gói 2.500 credit", "price_vnd": 200_000, "credits": 2_500},
     {"code": "P10000", "name": "Gói 10.000 credit", "price_vnd": 500_000, "credits": 10_000},

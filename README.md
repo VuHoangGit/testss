@@ -135,8 +135,11 @@ cần cron — reset lazy khi đọc/ghi). Credit nạp mua **không hết hạn
 gọi tính năng AI (OCR, OCR→Word, dịch, mỗi tin nhắn chat) tốn **50 credit**;
 AI lỗi thì tự hoàn. Hết credit → HTTP 402 kèm hướng dẫn nạp.
 
-Gói nạp (bảng `pricing_packages`, seed idempotent): 100.000₫ → 1.000 credit,
-200.000₫ → 2.500 credit, 500.000₫ → 10.000 credit.
+Gói nạp (bảng `pricing_packages`, seed idempotent): 10.000₫ → 50 credit,
+100.000₫ → 1.000 credit, 200.000₫ → 2.500 credit, 500.000₫ → 10.000 credit.
+Gói 10.000₫ vừa đủ 1 lượt gọi AI (50 credit) — dùng để nạp thử / chuyển khoản
+thật với số tiền nhỏ. Thêm gói mới: sửa `DEFAULT_PACKAGES` trong
+`app/services/payment_service.py` (seed theo `code`, không cần migration).
 
 Luồng thanh toán:
 

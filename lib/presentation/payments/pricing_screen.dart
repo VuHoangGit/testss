@@ -1,4 +1,4 @@
-/// Màn chọn gói credit: số dư hiện tại + 3 gói nạp → tạo đơn thanh toán.
+/// Màn chọn gói credit: số dư hiện tại + danh sách gói nạp (từ backend) → tạo đơn.
 library;
 
 import 'package:flutter/material.dart';

@@ -16,7 +16,7 @@ from app.db.base import Base, UTCDateTime
 
 
 class PricingPackage(Base):
-    """Gói nạp credit (100k→1.000, 200k→2.500, 500k→10.000)."""
+    """Gói nạp credit (10k→50, 100k→1.000, 200k→2.500, 500k→10.000)."""
 
     __tablename__ = "pricing_packages"
 

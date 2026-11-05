@@ -81,10 +81,38 @@ def test_pricing_returns_seeded_packages(
     assert response.status_code == 200
     packages = response.json()
     by_code = {p["code"]: p for p in packages}
+    assert by_code["P50"]["price_vnd"] == 10_000
+    assert by_code["P50"]["credits"] == 50
     assert by_code["P1000"]["price_vnd"] == 100_000
     assert by_code["P1000"]["credits"] == 1_000
     assert by_code["P2500"]["credits"] == 2_500
     assert by_code["P10000"]["price_vnd"] == 500_000
+    # Gói rẻ nhất đứng đầu danh sách ở màn Mua credit
+    assert packages[0]["code"] == "P50"
+
+
+def test_create_order_for_smallest_package(client: TestClient, make_token) -> None:
+    """Gói 10.000₫ → 50 credit: tạo đơn đúng số tiền + credit."""
+    order = _create_order(client, make_token, code="P50")
+    assert order["amount_vnd"] == 10_000
+    assert order["credits"] == 50
+    assert order["status"] == "pending"
+    assert order["transfer_content"] == f"NAP {order['order_code']}"
+
+
+def test_webhook_pays_small_package(client: TestClient, make_token) -> None:
+    """Chuyển 10.000₫ → cộng đúng 50 credit."""
+    _set_secret("test-webhook-secret")
+    try:
+        order = _create_order(client, make_token, code="P50")
+        result = _pay_order_via_webhook(client, order, txn="FT25001.0050")
+        assert "paid" in result["result"]
+        credits = client.get(
+            "/api/v1/payments/credits", headers=_auth_headers(make_token)
+        ).json()
+        assert credits["purchased"] == 50
+    finally:
+        _clear_secret()
 
 
 def test_new_user_gets_monthly_free_credits(client: TestClient, make_token) -> None:
