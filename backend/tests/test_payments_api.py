@@ -61,6 +61,32 @@ def test_sepay_webhook_requires_secret(client: TestClient) -> None:
         _clear_secret()
 
 
+def test_sepay_webhook_accepts_apikey_scheme(client: TestClient, make_token) -> None:
+    """SePay gửi `Authorization: Apikey <key>` khi webhook chọn "API Key"."""
+    _set_secret("test-webhook-secret")
+    try:
+        order = _create_order(client, make_token, code="P50")
+        response = client.post(
+            "/api/v1/payments/sepay/webhook",
+            json={
+                "content": f"QR {order['transfer_content']} abc",
+                "transferAmount": order["amount_vnd"],
+                "transferType": "in",
+                "transactionNumber": "FT-APIKEY-1",
+            },
+            # Đúng định dạng SePay thật: scheme "Apikey", không phải "Bearer"
+            headers={"Authorization": "Apikey test-webhook-secret"},
+        )
+        assert response.status_code == 202, response.text
+        assert "paid" in response.json()["result"]
+        credits = client.get(
+            "/api/v1/payments/credits", headers=_auth_headers(make_token)
+        ).json()
+        assert credits["purchased"] == 50
+    finally:
+        _clear_secret()
+
+
 def test_sepay_webhook_rejects_invalid_secret(client: TestClient) -> None:
     _set_secret("test-webhook-secret")
     try:

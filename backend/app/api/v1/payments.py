@@ -1,5 +1,6 @@
 """API thanh toán: gói credit, số dư, đơn nạp + webhook SePay."""
 
+import hashlib
 import logging
 import secrets
 import uuid
@@ -20,6 +21,28 @@ from app.services import credit_service, payment_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+
+
+def _fingerprint(value: str) -> str:
+    """8 ký tự đầu SHA-256 — so khớp secret trong log mà không lộ giá trị thật."""
+    return hashlib.sha256(value.encode()).hexdigest()[:8]
+
+
+# SePay gửi `Authorization: Apikey <key>` khi webhook chọn "API Key" — KHÔNG phải
+# "Bearer". Nhận cả hai (và `Token`) để cấu hình kiểu nào cũng chạy.
+_AUTH_SCHEMES = ("bearer", "apikey", "api-key", "token")
+
+
+def _parse_authorization(header: str | None) -> tuple[str, str | None]:
+    """Tách `Authorization` → (tên scheme để log, secret) — secret None nếu lạ."""
+    if not header:
+        return "KHÔNG CÓ HEADER NÀO", None
+    scheme, _, value = header.partition(" ")
+    scheme = scheme.strip().lower()
+    value = value.strip()
+    if scheme not in _AUTH_SCHEMES or not value:
+        return f"Authorization scheme lạ ({scheme or 'rỗng'})", None
+    return f"Authorization: {scheme}", value
 
 
 @router.get("/pricing", response_model=list[PackageOut])
@@ -85,8 +108,10 @@ def receive_sepay_webhook(
     """Nhận giao dịch tiền vào từ SePay → đối chiếu đơn → cộng credit.
 
     SePay gọi endpoint này không kèm access token của người dùng. Secret phải
-    được cấu hình ở backend và nhập vào phần bảo mật của webhook trên SePay
-    (SePay gửi kèm header `X-Webhook-Secret`).
+    được cấu hình ở backend và nhập vào phần bảo mật của webhook trên SePay.
+    Với phương thức "API Key", SePay gửi `Authorization: Apikey <key>` (không
+    phải Bearer); cũng nhận thêm `Authorization: Bearer <key>` và header
+    `X-Webhook-Secret`.
 
     Luôn trả 2xx khi secret hợp lệ để SePay không retry vô hạn; giao dịch
     không khớp đơn nào chỉ được log, không ảnh hưởng dữ liệu.
@@ -98,11 +123,19 @@ def receive_sepay_webhook(
             detail="SEPAY_WEBHOOK_SECRET chưa được cấu hình trên backend",
         )
 
-    bearer_secret = None
-    if authorization and authorization.lower().startswith("bearer "):
-        bearer_secret = authorization[7:].strip()
-    received_secret = x_webhook_secret or bearer_secret
+    scheme, received_secret = _parse_authorization(authorization)
+    received_secret = x_webhook_secret or received_secret
     if not received_secret or not secrets.compare_digest(received_secret, configured_secret):
+        # Log dạng băm: đủ để biết "khớp hay không" mà không ghi secret vào file log
+        logger.warning(
+            "SePay webhook xác thực thất bại: header=%s | nhận được len=%d sha=%s | "
+            "cấu hình len=%d sha=%s",
+            "X-Webhook-Secret" if x_webhook_secret else scheme,
+            len(received_secret or ""),
+            _fingerprint(received_secret or ""),
+            len(configured_secret),
+            _fingerprint(configured_secret),
+        )
         raise HTTPException(status_code=401, detail="Webhook secret không hợp lệ")
 
     if not payload:

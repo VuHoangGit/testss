@@ -175,8 +175,10 @@ POST https://<domain-cong-khai>/api/v1/payments/sepay/webhook
    - Loại giao dịch: **Tiền vào**
    - Định dạng: **JSON**
    - URL: `https://<domain-cong-khai>/api/v1/payments/sepay/webhook`
-   - Bảo mật: **API Key** (SePay gửi `Authorization: Bearer <key>`) hoặc
-     header `X-Webhook-Secret` — điền đúng chuỗi `SEPAY_WEBHOOK_SECRET`.
+   - Bảo mật: **API Key** — dán đúng chuỗi `SEPAY_WEBHOOK_SECRET`.
+     Lưu ý: ở chế độ này SePay gửi header **`Authorization: Apikey <key>`**
+     (scheme `Apikey`, **không phải** `Bearer`). Backend nhận cả `Apikey`,
+     `Bearer` và header `X-Webhook-Secret`.
 4. Giao dịch không khớp đơn nào chỉ được log, endpoint luôn trả 2xx để SePay
    không retry.
 
