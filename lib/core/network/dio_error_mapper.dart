@@ -21,6 +21,12 @@ Exception mapDioException(
   String fallback = 'Có lỗi xảy ra, thử lại sau',
 }) {
   final int? code = e.response?.statusCode;
+  if (code == 402) {
+    // Hết credit — không phải lỗi phiên: giữ nguyên detail hướng dẫn nạp
+    return InsufficientCreditsException(
+      extractDetail(e.response?.data) ?? 'Không đủ credit để dùng tính năng AI',
+    );
+  }
   if (code == 401 || code == 403) {
     return AuthException(
       extractDetail(e.response?.data) ?? 'Phiên đăng nhập không hợp lệ',

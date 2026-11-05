@@ -1,9 +1,14 @@
-/// Tab tài khoản: thông tin phiên + đăng xuất.
+/// Tab tài khoản: thông tin phiên, credit + đăng xuất.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/payment_entities.dart';
+import '../payments/format_vnd.dart';
+import '../payments/payment_history_screen.dart';
+import '../payments/payments_providers.dart';
+import '../payments/pricing_screen.dart';
 import '../providers.dart';
 
 class AccountTab extends ConsumerWidget {
@@ -76,6 +81,9 @@ class AccountTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 14),
+          _sectionTitle(context, 'Credits'),
+          _CreditsCard(userEmail: userEmail),
+          const SizedBox(height: 14),
           _sectionTitle(context, 'Preferences'),
           Card(
             child: Column(
@@ -146,6 +154,100 @@ class AccountTab extends ConsumerWidget {
       ),
     ),
   );
+}
+
+/// Số dư credit + lối vào mua credit / lịch sử thanh toán.
+class _CreditsCard extends ConsumerWidget {
+  const _CreditsCard({required this.userEmail});
+
+  final String userEmail;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<CreditBalance> balance = ref.watch(creditBalanceProvider);
+    return Card(
+      child: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: <Widget>[
+                Icon(
+                  Icons.toll_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      balance.when(
+                        data: (CreditBalance b) => Text(
+                          '${formatCredits(b.total)} credit',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                        loading: () => const Text('Đang tải số dư…'),
+                        error: (Object e, StackTrace _) =>
+                            const Text('Không tải được số dư'),
+                      ),
+                      Text(
+                        'Mỗi lượt OCR / dịch / chat: 50 credit · Free 300/tháng',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            dense: true,
+            visualDensity: const VisualDensity(vertical: -4),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            leading: Icon(
+              Icons.add_card,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            title: const Text('Mua credit'),
+            subtitle: Text(
+              'Nạp qua QR chuyển khoản — credit vào tự động',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              // Về từ màn nạp → invalidate để số dư cập nhật
+              ref.invalidate(creditBalanceProvider);
+              await Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(builder: (_) => const PricingScreen()),
+              );
+              ref.invalidate(creditBalanceProvider);
+            },
+          ),
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            dense: true,
+            visualDensity: const VisualDensity(vertical: -4),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            leading: Icon(
+              Icons.receipt_long_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            title: const Text('Lịch sử thanh toán'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (_) => const PaymentHistoryScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SignOutTile extends ConsumerWidget {

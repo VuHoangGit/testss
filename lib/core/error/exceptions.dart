@@ -24,3 +24,13 @@ class NetworkException implements Exception {
   @override
   String toString() => message;
 }
+
+/// Hết credit (HTTP 402) — UI hiện hướng dẫn nạp thêm, không phải lỗi hệ thống.
+class InsufficientCreditsException implements Exception {
+  const InsufficientCreditsException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}

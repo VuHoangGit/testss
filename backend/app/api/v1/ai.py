@@ -22,9 +22,17 @@ from app.schemas.ai import (
     TranslationResult,
 )
 from app.schemas.voice import VoiceCommandRequest, VoiceCommandResponse
-from app.services import ai_service, storage_service, voice_command_service
+from app.services import ai_service, credit_service, storage_service, voice_command_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+def _charge_ai(db, user) -> None:
+    """Trừ 50 credit trước mỗi lượt gọi AI; hết credit → 402 (kèm hướng dẫn)."""
+    try:
+        credit_service.charge(db, user)
+    except credit_service.InsufficientCredits as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
 
 
 def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
@@ -45,12 +53,14 @@ def _own_conversation(db, conversation_id: uuid.UUID, user_id) -> AiConversation
 def ocr(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> OCRResult:
     user = current
     document = _owned_document(db, document_id, user.id)
+    _charge_ai(db, user)
     try:
         text = ai_service.ocr_document(
             storage_service.read_document_bytes(document.storage_key), document.mime_type
         )
         return OCRResult(text=text, key_values=ai_service.extract_key_values(text))
     except ai_service.AIServiceError as exc:
+        credit_service.refund(db, user)  # lỗi AI — hoàn credit lượt này
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -58,12 +68,14 @@ def ocr(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> OCRResul
 def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Response:
     user = current
     document = _owned_document(db, document_id, user.id)
+    _charge_ai(db, user)
     try:
         text = ai_service.ocr_document(
             storage_service.read_document_bytes(document.storage_key), document.mime_type
         )
         content = ai_service.make_word_document(text)
     except ai_service.AIServiceError as exc:
+        credit_service.refund(db, user)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return Response(
         content=content,
@@ -105,8 +117,12 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
 
 
 @router.post("/translate", response_model=TranslationResult)
-def translate(body: TranslationRequest, current: CurrentUser) -> TranslationResult:
+def translate(
+    body: TranslationRequest, db: DbSession, current: CurrentUser
+) -> TranslationResult:
+    user = current
     source = body.source_language or None
+    _charge_ai(db, user)
     try:
         return TranslationResult(
             translation=ai_service.translate_selection(
@@ -114,6 +130,7 @@ def translate(body: TranslationRequest, current: CurrentUser) -> TranslationResu
             )
         )
     except ai_service.AIServiceError as exc:
+        credit_service.refund(db, user)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -137,9 +154,11 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
                 context_parts.append(text)
     if not context_parts:
         raise HTTPException(status_code=400, detail="Chọn ít nhất một PDF có nội dung văn bản")
+    _charge_ai(db, user)
     try:
         answer = ai_service.answer_question("\n\n".join(context_parts), body.question)
     except ai_service.AIServiceError as exc:
+        credit_service.refund(db, user)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     # Lưu hội thoại: gắn với tài liệu đầu tiên, dùng lại hội thoại mới nhất

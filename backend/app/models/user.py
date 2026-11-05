@@ -24,6 +24,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), index=True)
     name: Mapped[str | None] = mapped_column(String(255), default=None)
     avatar_url: Mapped[str | None] = mapped_column(Text, default=None)
+    # Credit dùng tính năng AI: 300 free reset đầu tháng (kỳ "YYYY-MM" đã
+    # cấp gần nhất nằm ở credit_period), credit nạp mua cộng dồn không hết hạn.
+    credit_free: Mapped[int] = mapped_column(default=300)
+    credit_purchased: Mapped[int] = mapped_column(default=0)
+    credit_period: Mapped[str] = mapped_column(String(7), default="")
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=func.now(), nullable=False
     )

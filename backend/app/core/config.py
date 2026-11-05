@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     anthropic_base_url: str = "https://api.z.ai/api/anthropic"
     anthropic_model: str = "glm-4.6"
     anthropic_timeout_seconds: int = 90
+    # Secret dùng để xác thực request webhook từ SePay.
+    sepay_webhook_secret: str = ""
+    # Tài khoản nhận tiền (từ trang quản lý SePay) — dùng dựng QR VietQR.
+    # Rỗng = chưa cấu hình: đơn vẫn tạo được nhưng không có ảnh QR.
+    sepay_bank_account: str = ""
+    sepay_bank_bin: str = "MB"  # mã ngân hàng cho VietQR (MB Bank)
+    sepay_account_name: str = ""
+
+    # Credit AI: free mỗi tháng và giá mỗi lượt gọi tính năng AI.
+    credit_monthly_free: int = 300
+    credit_cost_ai: int = 50
 
     @property
     def supabase_issuer(self) -> str:
