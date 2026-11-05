@@ -1,6 +1,7 @@
 """Test luồng credit + thanh toán SePay: gói, đơn nạp, webhook, trừ credit AI."""
 
 import os
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -305,6 +306,28 @@ def test_order_without_bank_account_has_no_qr(client: TestClient, make_token) ->
         order = _create_order(client, make_token)
         assert order["qr_url"] is None
         assert order["bank_account"] == ""
+
+
+def test_old_order_gets_fresh_qr_url(
+    client: TestClient, make_token, db_session_factory
+) -> None:
+    """Đơn cũ lưu URL hỏng vẫn trả QR đúng — QR tính lúc đọc, không dùng cột."""
+    with _env(SEPAY_BANK_ACCOUNT="0123456789", SEPAY_BANK_BIN="MB"):
+        order = _create_order(client, make_token)
+
+        # Giả lập đơn tạo từ code cũ: URL 404 đã lưu cứng trong DB
+        from app.models.payment import PaymentOrder
+
+        with db_session_factory() as db:
+            row = db.get(PaymentOrder, uuid.UUID(order["id"]))
+            row.qr_url = "https://img.vietqr.io/Image/QR?AccountNo=1&Bank=MB"
+            db.commit()
+
+        fetched = client.get(
+            f"/api/v1/payments/orders/{order['id']}", headers=_auth_headers(make_token)
+        ).json()
+        assert fetched["qr_url"].startswith("https://qr.sepay.vn/img?")
+        assert "acc=0123456789" in fetched["qr_url"]
 
 
 def test_webhook_ignores_money_out(client: TestClient, make_token) -> None:

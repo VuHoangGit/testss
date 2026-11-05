@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.config import get_settings
 from app.models.payment import PaymentOrder
+from app.services.payment_service import build_qr_url
 
 
 class PackageOut(BaseModel):
@@ -57,6 +58,11 @@ class OrderOut(BaseModel):
             "bank_bin": settings.sepay_bank_bin.strip(),
             "bank_account": settings.sepay_bank_account.strip(),
             "account_name": settings.sepay_account_name.strip(),
+            # QR suy ra được từ (số tiền, nội dung, cấu hình) nên tính lúc đọc
+            # thay vì dùng cột đã lưu: đổi cấu hình TK nhận hoặc sửa công thức
+            # URL là mọi đơn cũ (kể cả đơn đang chờ) hiện đúng ngay, không cần
+            # tạo lại đơn.
+            "qr_url": build_qr_url(order.amount_vnd, order.transfer_content),
         }
         for field in (
             "id",
@@ -65,7 +71,6 @@ class OrderOut(BaseModel):
             "amount_vnd",
             "credits",
             "transfer_content",
-            "qr_url",
             "created_at",
             "paid_at",
         ):

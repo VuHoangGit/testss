@@ -49,7 +49,9 @@ class PaymentOrder(Base):
     # pending | paid | cancelled
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     transfer_content: Mapped[str] = mapped_column(String(64))
-    # URL ảnh VietQR dựng từ cấu hình SePay (null nếu chưa cấu hình số TK)
+    # URL ảnh QR ghi lại lúc tạo đơn — chỉ để tra cứu. API KHÔNG dùng cột này
+    # mà tính lại từ (amount_vnd, transfer_content, cấu hình SePay) mỗi lần đọc,
+    # nhờ vậy đổi cấu hình TK nhận là đơn cũ hiện đúng ngay.
     qr_url: Mapped[str | None] = mapped_column(Text, default=None)
     # Mã giao dịch ngân hàng (transactionNumber/code của SePay) — UNIQUE
     # chống cộng credit 2 lần cho cùng 1 giao dịch

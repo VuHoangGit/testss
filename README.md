@@ -143,8 +143,11 @@ Luồng thanh toán:
 1. App gọi `POST /api/v1/payments/orders` tạo đơn → mã đơn `DVXXXXXX` +
    nội dung chuyển khoản `NAP DVXXXXXX` + URL ảnh QR.
    Ảnh QR lấy từ **`https://qr.sepay.vn/img`** (trả PNG — `img.vietqr.io` chỉ
-   trả SVG nên `Image.network` của Flutter không vẽ được). Chưa điền
-   `SEPAY_BANK_ACCOUNT` thì `qr_url = null`, app chỉ hiện thông tin dạng chữ.
+   trả SVG nên `Image.network` của Flutter không vẽ được). `qr_url` được
+   **tính lại mỗi lần đọc** từ số tiền + nội dung + cấu hình, không dùng giá trị
+   đã lưu trong DB — nên sửa `SEPAY_BANK_ACCOUNT` là các đơn đang chờ hiện QR
+   đúng ngay. Chưa điền `SEPAY_BANK_ACCOUNT` thì `qr_url = null`, app chỉ hiện
+   thông tin dạng chữ.
 2. Người dùng chuyển khoản đúng **số tiền** + **nội dung chứa mã đơn**.
 3. SePay gọi webhook → backend đối chiếu mã đơn + số tiền, đổi đơn thành
    `paid`, cộng credit. Chống xử lý trùng 3 lớp: đơn phải đang `pending`,
