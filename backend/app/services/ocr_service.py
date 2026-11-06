@@ -48,7 +48,9 @@ _OCR_RULES = [
     "trống. Không gộp ô, không tự thêm cột, không tính toán thêm.",
     "5. Văn bản nhiều cột: đọc hết cột trái từ trên xuống, rồi mới sang cột phải. "
     "Không trộn dòng giữa các cột.",
-    "6. Tiêu đề ghi bằng ##, mục con bằng ###.",
+    "6. Tiêu đề lớn nhất của tài liệu (tên chương/phần) ghi bằng #, mục con "
+    "bằng ##, mục nhỏ hơn nữa bằng ###. Dòng không phải tiêu đề thì không "
+    "đánh dấu.",
     "7. Chữ ký tay / con dấu / hình ảnh: ghi chú ngắn trong ngoặc vuông, ví dụ "
     "[chữ ký tay], [dấu đỏ tròn].",
     "8. Trang trắng hoặc không có chữ: trả đúng một dòng "

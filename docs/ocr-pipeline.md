@@ -8,7 +8,7 @@ hoặc đánh giá chất lượng OCR.
 
 | Loại trang | Cách xử lý | Số lượt gọi AI |
 |---|---|---|
-| PDF có lớp text (PDF sinh từ Word, xuất từ hệ thống…) | `pypdf` trích thẳng, không gọi AI | 0 |
+| PDF có lớp text (PDF sinh từ Word, xuất từ hệ thống…) | `pypdfium2` trích thẳng, không gọi AI | 0 |
 | PDF scan (trang không có lớp text) | `pypdfium2` render ảnh 200 DPI → model đọc | 1/trang |
 | Ảnh chụp / ảnh scan (png/jpeg/webp/gif) | model đọc trực tiếp | 1 |
 | Trích xuất trường dữ liệu (cuối mọi lượt OCR) | 1 lượt gọi trên văn bản đã có | 1 |
@@ -167,13 +167,49 @@ Thêm: khổ A4 (thay Letter mặc định), chân trang đánh số trang (fiel
 `w:updateFields` (phải đứng trước `w:compat` trong `settings.xml` — sai thứ tự
 là Word báo file hỏng) nên Word tính lại mục lục ngay khi mở.
 
-### Trang PDF có lớp text: suy tiêu đề từ cỡ chữ
+### Trang PDF có lớp text: pdfium + dựng lại đoạn văn
 
-`pypdf` trả chữ thuần nên mất hết cỡ chữ ⇒ mất cấu trúc. Luồng OCR dùng
-`ai_service.extract_pdf_pages_markdown` (luồng dịch/tóm tắt vẫn dùng
-`extract_pdf_pages` để văn bản gửi model không lẫn dấu Markdown): đọc cỡ chữ
-từng dòng qua `visitor_text`, so với **cỡ chữ thân** (cỡ chiếm nhiều ký tự nhất
-của cả tài liệu):
+Luồng OCR dùng `ai_service.extract_pdf_pages_markdown` (luồng dịch/tóm tắt vẫn
+dùng `extract_pdf_pages` để văn bản gửi model không lẫn dấu Markdown). Ba quyết
+định, mỗi cái ứng với một lỗi thấy trên bản xuất Word thật:
+
+**1. Chữ lấy bằng `pypdfium2`, không phải `pypdf`.** `pypdf` tự chèn dấu cách khi
+khe hở giữa hai ký tự rộng hơn dấu cách, nên với văn bản căn đều hai bên
+(justify) hoặc có kerning nó chèn vào giữa từ: *"video ch ất lượng"*, *"công
+đoạ n"*, *"th ời gian"*. pdfium (engine của Chrome) trả đúng chữ.
+
+**2. Dấu cách dựng lại từ toạ độ.** pdfium lại bỏ mất dấu cách ở chỗ PDF đặt nó
+bằng dịch con trỏ thay vì vẽ glyph: *"sựphát triển"*, *"dựán"*, *"dữliệu"*. Đo
+trên tài liệu thật (cỡ 12) với **hộp rộng** của pdfium (`get_charbox(i,
+loose=True)` — hộp tiến glyph, không phải hộp mực):
+
+| Loại khe hở | Khe hở ÷ cỡ chữ |
+|---|---|
+| giữa hai chữ trong cùng một từ | ≤ 0.041 |
+| chỗ pdfium bỏ mất dấu cách | 0.147–0.149 |
+
+⇒ ngưỡng `_WORD_GAP_RATIO = 0.09`, cách đều hai mức. Hộp mực (`loose=False`) cho
+0.05–0.23 ngay giữa các chữ trong một từ nên **không** dùng được. Glyph `U+FFFE`
+(unicode không có bảng) được đổi thành `-` — PDF dùng nó cho dấu gạch nối:
+*"Non￾Linear"* → *"Non-Linear"*.
+
+**3. Mỗi dòng thị giác không phải một đoạn.** Xuất thẳng từng dòng sang Word thì
+mỗi dòng thành một paragraph, câu bị chặt giữa chừng. `_lines_to_markdown` gom
+lại theo toạ độ:
+
+| Dấu hiệu | Kết luận |
+|---|---|
+| dòng trước chạm mép phải của cột (chữ tự xuống dòng) | nối vào đoạn đang mở |
+| dòng trước hụt mép phải > max(12pt, 2% mép cột) | đoạn mới |
+| cách dòng > 1.35 × nhịp dòng thường | đoạn mới |
+| dòng bắt đầu bằng `- ` `* ` `• ` `1. ` `\|` `>` | đoạn mới (gạch đầu dòng vẫn nhận dòng nối tiếp) |
+| dòng cuối kết thúc bằng `-` | nối liền, giữ gạch nối |
+| dòng chỉ có `•` (PDF vẽ dấu bằng lượt chữ riêng) | gắn vào dòng chữ cùng dòng kẻ, cùng cột |
+
+Tiêu đề suy từ **cỡ chữ trang đó** so với cỡ chữ thân của **chính trang đó** —
+không phải của cả tài liệu: có trang được vẽ qua phép biến đổi tỉ lệ (CV thiết
+kế bằng Canva) nên pdfium báo cỡ 170–440 thay vì 12, lấy cỡ chuẩn toàn tài liệu
+thì cả trang thành heading.
 
 | Tỉ lệ so với thân | Cấp |
 |---|---|
@@ -185,8 +221,20 @@ Dòng dài hơn 200 ký tự không nâng thành tiêu đề (dễ là đoạn v
 Văn bản **không** có `#` nào thì đoán theo mẫu hành chính VN: `CHƯƠNG/PHẦN …` →
 Heading 1, `Điều N …` → Heading 2 (chỉ đoán khi không có marker sẵn).
 
-Giới hạn: vẫn là heuristic — PDF trình bày bằng nhiều cột, tiêu đề cùng cỡ chữ
-thân in đậm, hoặc bảng có chữ to sẽ bị đoán sai cấp. Văn bản OCR (scan) do model
-đánh `##` nên không bị ảnh hưởng bởi bước này.
+**Dịch cấp cho có gốc** (`docx_service._promote_heading_levels`): sau khi có
+marker, cấp nông nhất luôn được dịch lên `#` (Heading 1). Lý do: model OCR chỉ
+ghi `##`/`###`, còn tài liệu một cỡ tiêu đề thì suy ra toàn cấp 2 — giữ nguyên
+sẽ làm cả cây outline lùi một cấp và mục lục Word sai thứ bậc. Tương quan giữa
+các cấp không đổi. Prompt OCR (`_OCR_RULES` luật 6) cũng yêu cầu model đánh `#`
+cho tiêu đề lớn nhất của tài liệu, để phần lớn trường hợp không cần dịch.
+
+Giới hạn đã biết (đo trên Proposal.pdf 10 trang và một CV 2 cột):
+
+- Đoạn vắt qua **chân trang** vẫn thành hai đoạn (xử lý từng trang riêng).
+- PDF nhiều cột: thứ tự đọc theo luồng chữ của PDF, có thể đọc hết cột trái rồi
+  mới sang cột phải thay vì xen kẽ từng dòng.
+- Emoji và glyph không có bảng unicode bị pdfium bỏ (CV mất 📞, ✉️); PDF có mật
+  khẩu hoặc pdfium lỗi thì quay về đường `pypdf` cũ (chữ thô, không cấu trúc).
+- Tiêu đề cùng cỡ chữ thân nhưng in đậm, hoặc bảng có chữ to, vẫn bị đoán sai cấp.
 
 Test: `tests/test_docx_service.py`, `tests/test_pdf_markdown_extraction.py`.

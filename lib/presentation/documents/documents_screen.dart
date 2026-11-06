@@ -2,10 +2,12 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/files/file_saver.dart';
 import '../../domain/entities/document_entities.dart';
 import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
@@ -75,6 +77,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     String title,
     String message, {
     String confirmLabel = 'Delete',
+    bool destructive = true,
   }) async {
     final bool? ok = await showDialog<bool>(
       context: context,
@@ -88,7 +91,9 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
+              backgroundColor: destructive
+                  ? Theme.of(ctx).colorScheme.error
+                  : null,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(confirmLabel),
@@ -124,6 +129,80 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         doc: doc,
       ),
     );
+  }
+
+  /// Xuất tài liệu sang Word (.docx): OCR nội dung rồi lưu file giữ cấu trúc.
+  ///
+  /// Đây là thao tác AI (tốn 50 credit, có thể lâu với tài liệu scan) nên hỏi
+  /// trước; trong lúc chờ hiện dialog tiến trình để người dùng biết app không
+  /// treo.
+  Future<void> _exportWord(DocumentItem doc) async {
+    if (!(doc.isPdf || doc.isImage)) {
+      _showSnack('Only PDF and image files can be exported to Word');
+      return;
+    }
+    final bool ok = await _confirm(
+      'Export to Word?',
+      'AI reads "${doc.name}" and saves it as a .docx file that keeps headings, '
+          'tables and lists.\n\nThis uses 50 credits. Scanned pages take about '
+          '15 seconds each.',
+      confirmLabel: 'Export',
+      destructive: false,
+    );
+    if (!ok || !mounted) return;
+
+    final NavigatorState navigator = Navigator.of(context, rootNavigator: true);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext ctx) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: <Widget>[
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    'Reading "${doc.name}"…\nLarge or scanned files can take a '
+                    'few minutes.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final Uint8List bytes = await ref
+          .read(aiRepositoryProvider)
+          .ocrWord(doc.id);
+      final String fileName = '${_fileStem(doc.name)}.docx';
+      final String? saved = await const FileSaver().saveBytes(
+        fileName: fileName,
+        bytes: bytes,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+      if (saved != null) _showSnack('Exported "$fileName"');
+    } on Exception catch (e) {
+      _showSnack(e.toString());
+    } finally {
+      if (mounted) navigator.pop();
+    }
+  }
+
+  /// "Báo cáo.pdf" → "Báo cáo" (bỏ đuôi file, giữ phần còn lại nguyên vẹn).
+  String _fileStem(String name) {
+    final int dot = name.lastIndexOf('.');
+    return dot > 0 ? name.substring(0, dot) : name;
   }
 
   Future<void> _toggleFavorite(DocumentItem doc) async {
@@ -348,6 +427,71 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               icon: const Icon(Icons.checklist),
               label: const Text('Select to merge'),
             ),
+          // Xuất PDF/ảnh sang Word ngay tại chỗ dựng file, cạnh "Select to merge".
+          OutlinedButton.icon(
+            onPressed: () => _exportWordFromToolbar(data),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text('Export to Word'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Nút toolbar: chọn tài liệu PDF/ảnh rồi xuất Word (kèm tải file về máy).
+  ///
+  /// Đang ở chế độ chọn và chọn đúng 1 file hợp lệ → xuất luôn file đó; còn
+  /// lại mở hộp chọn để không phải đoán người dùng muốn file nào.
+  Future<void> _exportWordFromToolbar(DocumentsState data) async {
+    final List<DocumentItem> eligible = <DocumentItem>[
+      for (final DocumentItem doc in data.documents)
+        if (doc.isPdf || doc.isImage) doc,
+    ];
+    if (eligible.isEmpty) {
+      _showSnack('No PDF or image files to export');
+      return;
+    }
+    final List<DocumentItem> selected = <DocumentItem>[
+      for (final DocumentItem doc in eligible)
+        if (data.selection.contains(doc.id)) doc,
+    ];
+    final DocumentItem? target = selected.length == 1
+        ? selected.single
+        : await _pickDocumentForWord(eligible);
+    if (target == null) return;
+    await _exportWord(target);
+  }
+
+  Future<DocumentItem?> _pickDocumentForWord(List<DocumentItem> documents) {
+    return showDialog<DocumentItem>(
+      context: context,
+      builder: (BuildContext ctx) => SimpleDialog(
+        title: const Text('Export to Word'),
+        children: <Widget>[
+          SizedBox(
+            width: 440,
+            height: 340,
+            child: ListView.builder(
+              itemCount: documents.length,
+              itemBuilder: (BuildContext _, int index) {
+                final DocumentItem doc = documents[index];
+                return ListTile(
+                  leading: Icon(
+                    doc.isPdf
+                        ? Icons.picture_as_pdf_outlined
+                        : Icons.image_outlined,
+                  ),
+                  title: Text(
+                    doc.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(doc.isPdf ? 'PDF' : 'Image'),
+                  onTap: () => Navigator.of(ctx).pop(doc),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -447,6 +591,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             selected: data.selection.contains(doc.id),
             onToggleSelect: () => notifier.toggleSelect(doc.id),
             onDownload: () => _download(doc),
+            onExportWord: () => _exportWord(doc),
             onToggleFavorite: () => _toggleFavorite(doc),
             onSplit: () => _split(doc),
             onProtect: () => _protect(doc, removing: false),
@@ -550,6 +695,7 @@ class _DocumentTile extends StatelessWidget {
     required this.selected,
     required this.onToggleSelect,
     required this.onDownload,
+    required this.onExportWord,
     required this.onToggleFavorite,
     required this.onSplit,
     required this.onProtect,
@@ -563,6 +709,7 @@ class _DocumentTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onToggleSelect;
   final VoidCallback onDownload;
+  final VoidCallback onExportWord;
   final VoidCallback onToggleFavorite;
   final VoidCallback onSplit;
   final VoidCallback onProtect;
@@ -662,6 +809,8 @@ class _DocumentTile extends StatelessWidget {
                       switch (action) {
                         case 'download':
                           onDownload();
+                        case 'exportWord':
+                          onExportWord();
                         case 'favorite':
                           onToggleFavorite();
                         case 'split':
@@ -679,6 +828,12 @@ class _DocumentTile extends StatelessWidget {
                         value: 'download',
                         child: Text('Download'),
                       ),
+                      // OCR chỉ đọc được PDF và ảnh → ẩn với các loại khác
+                      if (doc.isPdf || doc.isImage)
+                        const PopupMenuItem<String>(
+                          value: 'exportWord',
+                          child: Text('Export to Word…'),
+                        ),
                       PopupMenuItem<String>(
                         value: 'favorite',
                         child: Text(doc.isFavorite ? 'Unfavorite' : 'Favorite'),
