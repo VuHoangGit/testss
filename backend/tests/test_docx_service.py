@@ -37,14 +37,22 @@ def test_heading_levels_become_word_heading_styles():
 
 
 def test_heading_without_space_after_hashes_is_still_heading():
-    document = _document("##1.1 Phạm vi\n", include_toc=False)
-    assert document.paragraphs[0].style.name == "Heading 2"
-    assert document.paragraphs[0].text == "1.1 Phạm vi"
+    document = _document("# Chương 1\n##1.1 Phạm vi\n", include_toc=False)
+    assert document.paragraphs[1].style.name == "Heading 2"
+    assert document.paragraphs[1].text == "1.1 Phạm vi"
+
+
+def test_promotes_shallowest_level_to_heading_one():
+    """Model chỉ trả `##`/`###` → vẫn phải ra Heading 1 làm gốc của outline."""
+    document = _document("## Chương 1\n### 1.1 Phạm vi\nNội dung.\n", include_toc=False)
+
+    styles = _styles(document)
+    assert styles[:2] == ["Heading 1", "Heading 2"]
 
 
 def test_heading_keeps_inline_bold_run():
-    document = _document("## Điều **5** quan trọng\n", include_toc=False)
-    paragraph = document.paragraphs[0]
+    document = _document("# Hợp đồng\n## Điều **5** quan trọng\n", include_toc=False)
+    paragraph = document.paragraphs[1]
     assert paragraph.style.name == "Heading 2"
     assert paragraph.text == "Điều 5 quan trọng"
     assert any(run.bold for run in paragraph.runs if run.text == "5")
@@ -83,13 +91,37 @@ def test_update_fields_flag_sits_before_compat_in_settings():
 
 
 def test_toc_field_has_full_field_structure():
-    """Field phải có begin → instrText → separate → end (đúng cú pháp OOXML)."""
-    document = _document("# Một\n## Hai\n")
-    toc_paragraph = next(p for p in document.paragraphs if "TOC" in p._p.xml)
+    """Field phải có begin → instrText → separate → end (đúng cú pháp OOXML).
 
-    marks = [mark.get(qn("w:fldCharType")) for mark in toc_paragraph._p.iter(qn("w:fldChar"))]
+    Kết quả của field là danh sách tiêu đề nên trải nhiều paragraph: begin và
+    separate ở dòng mục lục đầu, end ở dòng mục lục cuối — giống cách Word ghi.
+    """
+    document = _document("# Một\n## Hai\n")
+
+    marks = [
+        mark.get(qn("w:fldCharType"))
+        for mark in document.element.body.iter(qn("w:fldChar"))
+    ]
     assert marks == ["begin", "separate", "end"]
-    assert 'TOC \\o "1-3"' in toc_paragraph._p.xml
+    assert 'TOC \\o "1-3"' in document.element.xml
+
+
+def test_toc_lists_headings_so_viewers_show_content_without_updating_fields():
+    """WPS/Google Docs không tự tính lại field: mục lục phải có sẵn tiêu đề."""
+    document = _document("# Chương Một\nNội dung.\n## Điều 2\nNội dung.\n")
+
+    entries = [
+        paragraph
+        for paragraph in document.paragraphs
+        if paragraph.style.name == "Normal" and paragraph.text.strip()
+    ]
+    texts = [paragraph.text for paragraph in entries]
+    assert texts[:2] == ["Chương Một", "Điều 2"]
+    # Cấp 2 thụt lề nhiều hơn cấp 1
+    assert entries[1].paragraph_format.left_indent > entries[0].paragraph_format.left_indent
+    # Dòng mục lục đầu tiên mở field, dòng cuối đóng field
+    assert 'fldCharType="begin"' in entries[0]._p.xml
+    assert 'fldCharType="end"' in entries[1]._p.xml
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +186,52 @@ def test_single_pipe_line_stays_a_paragraph():
 
     assert document.tables == []
     assert document.paragraphs[0].text == "| chỉ một dòng |"
+
+
+# ---------------------------------------------------------------------------
+# Đoạn văn: dòng bị ngắt giữa câu phải nối lại, không thành paragraph riêng
+
+
+def test_wrapped_lines_of_one_paragraph_are_joined():
+    """PDF cắt mỗi dòng hình ảnh thành một dòng: xuất Word phải gộp lại."""
+    document = _document(
+        "Câu này bị ngắt giữa\ndòng nhưng vẫn là một đoạn.\n", include_toc=False
+    )
+
+    assert [p.text for p in document.paragraphs] == [
+        "Câu này bị ngắt giữa dòng nhưng vẫn là một đoạn."
+    ]
+
+
+def test_sentence_end_starts_new_paragraph():
+    document = _document("Đoạn một đã hết.\nĐoạn hai bắt đầu.\n", include_toc=False)
+
+    assert [p.text for p in document.paragraphs] == [
+        "Đoạn một đã hết.",
+        "Đoạn hai bắt đầu.",
+    ]
+
+
+def test_hyphenated_word_at_line_end_joins_without_space():
+    document = _document("phi tuyến tính (Non-\nLinear Editing).\n", include_toc=False)
+
+    assert document.paragraphs[0].text == "phi tuyến tính (Non-Linear Editing)."
+
+
+def test_heading_and_list_break_the_running_paragraph():
+    document = _document(
+        "Câu dẫn chưa hết câu\n## Tiêu đề\n- Mục một\n", include_toc=False
+    )
+
+    texts = [p.text for p in document.paragraphs]
+    assert texts == ["Câu dẫn chưa hết câu", "Tiêu đề", "Mục một"]
+
+
+def test_control_characters_are_dropped_instead_of_crashing():
+    """U+FFFE (glyph gạch nối) và ký tự điều khiển làm python-docx ném ValueError."""
+    document = _document("(Non￾Linear)\x0btext\x07.\n", include_toc=False)
+
+    assert document.paragraphs[0].text == "(Non-Linear)text."
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +337,8 @@ def test_inference_does_not_override_model_markup():
     document = _document("## Điều 1. Phạm vi\nĐiều 2. Đối tượng áp dụng\n", include_toc=False)
 
     # có marker sẵn → tôn trọng model, không tự nâng dòng còn lại
-    assert [p.style.name for p in document.paragraphs] == ["Heading 2", "Normal"]
+    # (riêng cấp nông nhất được dịch lên Heading 1 để outline có gốc)
+    assert [p.style.name for p in document.paragraphs] == ["Heading 1", "Normal"]
 
 
 # ---------------------------------------------------------------------------

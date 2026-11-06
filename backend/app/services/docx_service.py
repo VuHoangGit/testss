@@ -43,6 +43,10 @@ _CODE_SIZE = Pt(10)
 # phải tiêu đề → không nâng thành heading.
 _MAX_HEADING_CHARS = 120
 
+# Mỗi cấp mục lục thụt vào bấy nhiêu cm (template mặc định không có style
+# "TOC 1…9" nên thụt lề bằng định dạng trực tiếp).
+_TOC_INDENT_CM = 0.6
+
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<text>.*\S)\s*$")
 _PAGE_MARKER_RE = re.compile(r"^-{3,}\s*(?:Trang|Page)\s+(?P<page>\d+)\s*-{3,}$", re.IGNORECASE)
 _BULLET_RE = re.compile(r"^(?P<indent>[ \t]*)[-*+•–—]\s+(?P<text>.*\S)$")
@@ -74,6 +78,10 @@ _CHAPTER_RE = re.compile(r"^(?:PHẦN|CHƯƠNG|Phần|Chương)\s+[IVXLC\d]+", r
 _ARTICLE_RE = re.compile(r"^(?:ĐIỀU|Điều)\s+\d+", re.IGNORECASE)
 # Dấu kết câu — dòng tiêu đề thường không có, dòng văn xuôi thì có.
 _SENTENCE_END = (".", ",", ";", ":")
+# Dấu kết thúc **đoạn văn** (khác _SENTENCE_END: dấu phẩy không kết thúc đoạn).
+_PARAGRAPH_END = (".", "!", "?", ":", ";", "…", "”", '"', ")", "]")
+# Ký tự điều khiển — XML 1.0 không cho phép (tab/xuống dòng đã xử lý riêng).
+_XML_ILLEGAL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 
 def to_docx_bytes(text: str, *, title: str | None = None, include_toc: bool = True) -> bytes:
@@ -92,14 +100,16 @@ def build_document(text: str, *, title: str | None = None, include_toc: bool = T
     lines = _prepare_lines(text)
     if not any(_HEADING_RE.match(line) for line in lines):
         lines = _infer_headings(lines)
+    lines = _promote_heading_levels(lines)
 
     document = Document()
     _setup_page(document)
     if title:
         document.core_properties.title = title
 
-    if include_toc and sum(1 for line in lines if _HEADING_RE.match(line)) >= 2:
-        _add_table_of_contents(document)
+    headings = _collect_headings(lines)
+    if include_toc and len(headings) >= 2:
+        _add_table_of_contents(document, headings)
 
     _render_lines(document, lines)
     _add_page_numbers(document)
@@ -117,12 +127,62 @@ def _prepare_lines(text: str) -> list[str]:
         if _FENCE_RE.match(raw):
             continue
         line = raw.rstrip().replace("\t", "  ")
+        line = _clean_glyphs(line)
         if line.strip():
             # "##Tiêu đề" (model quên dấu cách) vẫn là heading; giữ nguyên thụt
             # đầu dòng vì nó là mức lồng của danh sách.
             line = re.sub(r"^(\s*#{1,6})(?=[^#\s])", r"\1 ", line)
         lines.append(line)
     return lines
+
+
+def _clean_glyphs(line: str) -> str:
+    """Đổi/bỏ ký tự mà XML không nhận — gặp là python-docx ném ValueError (HTTP 500).
+
+    U+FFFE là "non-character" nhưng nhiều PDF dùng nó cho glyph dấu gạch nối khi
+    ngắt dòng ("Non￾Linear"); đường trích bằng pdfium đã đổi sẵn, còn đường dự
+    phòng pypdf thì để nguyên nên phải chặn ở đây.
+    """
+    return _XML_ILLEGAL_RE.sub("", line.replace("￾", "-").replace("￿", ""))
+
+
+def _promote_heading_levels(lines: list[str]) -> list[str]:
+    """Dịch cấp heading để cấp nông nhất trở thành `#` (Heading 1).
+
+    Model OCR thường chỉ ghi `##`/`###` (không có `#`), còn tài liệu cùng một
+    cỡ tiêu đề thì suy ra toàn cấp 2. Giữ nguyên sẽ làm cả cây outline lùi một
+    cấp: mục lục vẫn dựng được nhưng sai thứ bậc so với bản gốc. Dịch lên cho
+    tiêu đề ngoài cùng thành Heading 1, tương quan giữa các cấp không đổi.
+    """
+    levels = [
+        len(match.group("hashes"))
+        for line in lines
+        if (match := _HEADING_RE.match(line.strip()))
+    ]
+    shift = min(levels, default=1) - 1
+    if shift <= 0:
+        return lines
+
+    result: list[str] = []
+    for line in lines:
+        match = _HEADING_RE.match(line.strip())
+        if match is None:
+            result.append(line)
+            continue
+        indent = line[: len(line) - len(line.lstrip())]
+        level = len(match.group("hashes")) - shift
+        result.append(f"{indent}{'#' * level} {match.group('text')}")
+    return result
+
+
+def _collect_headings(lines: list[str]) -> list[tuple[int, str]]:
+    """`(cấp, chữ tiêu đề)` của mọi dòng heading — nguồn dựng mục lục."""
+    result: list[tuple[int, str]] = []
+    for line in lines:
+        match = _HEADING_RE.match(line.strip())
+        if match:
+            result.append((len(match.group("hashes")), match.group("text")))
+    return result
 
 
 def _infer_headings(lines: list[str]) -> list[str]:
@@ -159,11 +219,28 @@ def _setup_page(document: Document) -> None:
     section.right_margin = Cm(2.0)
 
 
-def _add_table_of_contents(document: Document) -> None:
-    """Chèn mục lục tự động (field TOC) — Word dựng lại khi mở file."""
+def _add_table_of_contents(document: Document, headings: list[tuple[int, str]]) -> None:
+    """Chèn mục lục: field TOC **kèm kết quả có sẵn** là danh sách tiêu đề.
+
+    Trước đây phần kết quả của field chỉ là một câu placeholder, nên trình đọc
+    không tự tính lại field (WPS, Google Docs, viewer điện thoại) hiện đúng câu
+    đó và người dùng thấy như file lỗi. Nay kết quả là chính các tiêu đề (thụt
+    theo cấp) — luôn đọc được; Word/Office cập nhật field sẽ thay bằng mục lục
+    đầy đủ kèm số trang và liên kết (cờ `updateFields` bật sẵn).
+    """
     _paragraph_with_text(document, "Mục lục", style="Title")
-    paragraph = document.add_paragraph()
-    _append_field(paragraph, ' TOC \\o "1-3" \\h \\z \\u ', "Mục lục sẽ hiện sau khi mở file.")
+    entries: list[Paragraph] = []
+    for level, text in headings:
+        entry = document.add_paragraph()
+        entry.paragraph_format.left_indent = Cm(_TOC_INDENT_CM * (level - 1))
+        if not entries:
+            # begin/separate nằm ngay trong dòng mục lục đầu tiên (như Word
+            # ghi) để không sinh thêm dòng trống trên đầu mục lục.
+            _append_field_begin(entry, ' TOC \\o "1-3" \\h \\z \\u ')
+        _add_inline(entry, text)
+        entries.append(entry)
+    if entries:  # đầu vào đã đảm bảo ≥ 2 tiêu đề, đây chỉ là chốt an toàn
+        _append_field_end(entries[-1])
     document.add_page_break()
     _enable_field_update(document)
 
@@ -210,7 +287,18 @@ def _add_page_numbers(document: Document) -> None:
 
 
 def _append_field(paragraph: Paragraph, instruction: str, placeholder: str) -> None:
-    """Ghi một field Word (TOC, PAGE…) vào paragraph đang có."""
+    """Ghi một field Word một dòng (PAGE…) với kết quả có sẵn là `placeholder`."""
+    _append_field_begin(paragraph, instruction)
+    paragraph.add_run(placeholder)
+    _append_field_end(paragraph)
+
+
+def _append_field_begin(paragraph: Paragraph, instruction: str) -> None:
+    """Mở field: `begin` (dirty) → `instrText` → `separate`.
+
+    Kết quả của field là các run ghi sau lời gọi này (với TOC: nhiều dòng tiêu
+    đề, có thể trải nhiều paragraph) cho tới [_append_field_end].
+    """
     _field_mark(paragraph, "begin")
     run = paragraph.add_run()
     instr = OxmlElement("w:instrText")
@@ -218,9 +306,10 @@ def _append_field(paragraph: Paragraph, instruction: str, placeholder: str) -> N
     instr.text = instruction
     run._r.append(instr)  # noqa: SLF001 — python-docx không có API cho field
     _field_mark(paragraph, "separate")
-    placeholder_run = paragraph.add_run(placeholder)
-    placeholder_run.italic = True
-    placeholder_run.font.color.rgb = _MARKER_COLOR
+
+
+def _append_field_end(paragraph: Paragraph) -> None:
+    """Đóng field ở paragraph cuối cùng của phần kết quả."""
     _field_mark(paragraph, "end")
 
 
@@ -239,16 +328,32 @@ def _field_mark(paragraph: Paragraph, kind: str) -> None:
 
 
 def _render_lines(document: Document, lines: list[str]) -> None:
-    """Duyệt từng dòng và ghi khối tương ứng (bảng chiếm nhiều dòng liền nhau)."""
+    """Duyệt từng dòng và ghi khối tương ứng (bảng chiếm nhiều dòng liền nhau).
+
+    Các dòng văn xuôi liền nhau được gộp thành **một** paragraph: bản PDF cắt
+    mỗi dòng hình ảnh thành một dòng văn bản, ghi nguyên xi thì đoạn văn vụn
+    đúng bằng số dòng bản gốc (tài liệu 10 trang ra 19 trang Word, câu bị ngắt
+    giữa dòng). Ngắt đoạn khi dòng trước đã hết câu, gặp dòng trống, hoặc gặp
+    khối khác (heading, bảng, danh sách, trích dẫn, ngắt trang).
+    """
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            _add_paragraph(document, _join_paragraph_lines(buffer))
+            buffer.clear()
+
     index = 0
     while index < len(lines):
         line = lines[index]
         stripped = line.strip()
         if not stripped:
+            flush()
             index += 1
             continue
 
         if _PAGE_MARKER_RE.match(stripped):
+            flush()
             document.add_page_break()
             index += 1
             continue
@@ -258,17 +363,20 @@ def _render_lines(document: Document, lines: list[str]) -> None:
             continue
 
         if _is_table_start(lines, index):
+            flush()
             index = _add_table(document, lines, index)
             continue
 
         heading = _HEADING_RE.match(stripped)
         if heading:
+            flush()
             _add_heading(document, heading.group("text"), len(heading.group("hashes")))
             index += 1
             continue
 
         bullet = _BULLET_RE.match(line)
         if bullet:
+            flush()
             _add_list_item(
                 document, bullet.group("text"), ordered=False, indent=bullet.group("indent")
             )
@@ -277,6 +385,7 @@ def _render_lines(document: Document, lines: list[str]) -> None:
 
         ordered = _ORDERED_RE.match(line)
         if ordered:
+            flush()
             _add_list_item(
                 document, ordered.group("text"), ordered=True, indent=ordered.group("indent")
             )
@@ -285,16 +394,50 @@ def _render_lines(document: Document, lines: list[str]) -> None:
 
         quote = _QUOTE_RE.match(line)
         if quote:
+            flush()
             _add_paragraph(document, quote.group("text") or "", style="Quote")
             index += 1
             continue
 
         if _CAPTION_RE.match(stripped):
+            flush()
             paragraph = _add_paragraph(document, stripped, style="Caption")
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        else:
-            _add_paragraph(document, stripped)
+            index += 1
+            continue
+
+        # Dòng văn xuôi: dòng trước đã hết câu thì đây là đoạn mới.
+        stray_pipe = _is_stray_pipe_line(stripped)
+        if buffer and (_ends_argument(buffer[-1]) or stray_pipe):
+            flush()
+        buffer.append(stripped)
+        if stray_pipe:  # dòng kẻ/bảng hỏng: đứng riêng, không dính với văn xuôi
+            flush()
         index += 1
+
+    flush()
+
+
+def _ends_argument(line: str) -> bool:
+    """Dòng đã kết thúc một đoạn văn (dấu kết câu) → dòng sau là đoạn mới."""
+    return line.rstrip().endswith(_PARAGRAPH_END)
+
+
+def _is_stray_pipe_line(line: str) -> bool:
+    """Dòng bắt đầu bằng `|` nhưng không đủ thành bảng (model OCR hay trả về).
+
+    Giữ nguyên dòng đó thành một paragraph riêng: nối nó vào câu văn bên cạnh
+    sẽ thành "| chỉ một dòng | Đoạn sau." — sai cả nội dung lẫn hình thức.
+    """
+    return line.startswith("|")
+
+
+def _join_paragraph_lines(parts: list[str]) -> str:
+    """Ghép các dòng của cùng một đoạn; gạch nối cuối dòng thì nối liền chữ."""
+    text = parts[0]
+    for part in parts[1:]:
+        text = text + part if text.endswith("-") else f"{text} {part}"
+    return text
 
 
 def _add_heading(document: Document, text: str, level: int) -> None:
