@@ -23,15 +23,19 @@ _CODE_ALPHABET = "ABCDEFGHJKLMNPRTUVWXY34679"
 # Thứ tự trong list là `sort_order` (hiện từ trên xuống ở màn Mua credit).
 DEFAULT_PACKAGES: list[dict[str, object]] = [
     # Gói nhỏ nhất: đủ cho 1 lượt gọi AI (50 credit), tiện nạp thử/chuyển khoản thật
-    {"code": "P50", "name": "Gói 50 credit", "price_vnd": 10_000, "credits": 50},
-    {"code": "P1000", "name": "Gói 1.000 credit", "price_vnd": 100_000, "credits": 1_000},
-    {"code": "P2500", "name": "Gói 2.500 credit", "price_vnd": 200_000, "credits": 2_500},
-    {"code": "P10000", "name": "Gói 10.000 credit", "price_vnd": 500_000, "credits": 10_000},
+    {"code": "P50", "name": "50-credit pack", "price_vnd": 10_000, "credits": 50},
+    {"code": "P1000", "name": "1,000-credit pack", "price_vnd": 100_000, "credits": 1_000},
+    {"code": "P2500", "name": "2,500-credit pack", "price_vnd": 200_000, "credits": 2_500},
+    {"code": "P10000", "name": "10,000-credit pack", "price_vnd": 500_000, "credits": 10_000},
 ]
 
 
 def ensure_pricing_seed(db: Session) -> None:
-    """Chèn các gói mặc định nếu bảng còn trống (idempotent theo code)."""
+    """Chèn các gói mặc định nếu bảng còn trống (idempotent theo code).
+
+    Gói đã có nhưng tên khác (vd DB tạo trước khi đổi sang tên tiếng Anh) được
+    cập nhật lại tên hiển thị; giá/credit giữ nguyên để không đổi dữ liệu bán.
+    """
     for i, pkg in enumerate(DEFAULT_PACKAGES):
         exists = db.scalar(select(PricingPackage).where(PricingPackage.code == pkg["code"]))
         if exists is None:
@@ -44,6 +48,8 @@ def ensure_pricing_seed(db: Session) -> None:
                     sort_order=i,
                 )
             )
+        elif exists.name != str(pkg["name"]):
+            exists.name = str(pkg["name"])
     db.commit()
 
 
@@ -69,7 +75,7 @@ def _new_order_code(db: Session) -> str:
         taken = db.scalar(select(PaymentOrder).where(PaymentOrder.order_code == code))
         if taken is None:
             return code
-    raise RuntimeError("Không sinh được mã đơn duy nhất")
+    raise RuntimeError("Could not generate a unique order code")
 
 
 # Dịch vụ ảnh QR của chính SePay — trả PNG (img.vietqr.io chỉ trả SVG, Flutter
@@ -101,9 +107,9 @@ def create_order(db: Session, user: User, package_code: str) -> PaymentOrder:
     ensure_pricing_seed(db)
     package = get_package(db, package_code)
     if package is None or not package.active:
-        raise PackageNotFoundError(f"Không tìm thấy gói {package_code}")
+        raise PackageNotFoundError(f"Package not found: {package_code}")
     code = _new_order_code(db)
-    content = f"NAP {code}"
+    content = f"TOPUP {code}"
     order = PaymentOrder(
         user_id=user.id,
         package_id=package.id,

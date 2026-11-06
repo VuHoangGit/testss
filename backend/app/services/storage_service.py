@@ -31,7 +31,7 @@ def save_document_bytes(data: bytes, key: str) -> None:
 def document_path(key: str) -> Path:
     # Chặn path traversal: key phải là tên file thuần
     if Path(key).name != key or key in {".", ".."}:
-        raise ValueError("Storage key không hợp lệ")
+        raise ValueError("Invalid storage key")
     return documents_dir() / key
 
 

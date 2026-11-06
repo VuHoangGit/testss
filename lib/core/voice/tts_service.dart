@@ -1,4 +1,4 @@
-/// Bọc flutter_tts — đọc phản hồi tiếng Việt (giọng vi-VN nếu có).
+/// Bọc flutter_tts — đọc phản hồi tiếng Anh (giọng en-US nếu có).
 library;
 
 import 'package:flutter_tts/flutter_tts.dart';
@@ -10,7 +10,7 @@ class TtsService {
   Future<void> _ensureInit() async {
     if (_initialized) return;
     try {
-      await _tts.setLanguage('vi-VN');
+      await _tts.setLanguage('en-US');
       await _tts.setSpeechRate(0.5);
       await _tts.awaitSpeakCompletion(true);
     } on Exception {

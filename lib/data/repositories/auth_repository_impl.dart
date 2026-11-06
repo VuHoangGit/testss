@@ -63,7 +63,7 @@ class SupabaseAuthRepository implements AuthRepository {
     // hướng dẫn đúng thay vì "Account created, please sign in" gây hiểu lầm.
     if (res.session == null) {
       throw const AuthException(
-        'Đã tạo tài khoản — mở hộp thư và bấm link xác nhận email trước khi đăng nhập',
+        'Account created — open your inbox and click the confirmation link before signing in',
         needsEmailConfirmation: true,
       );
     }
@@ -81,7 +81,7 @@ class SupabaseAuthRepository implements AuthRepository {
     }
     final supabase.Session? session = _auth.currentSession;
     if (session == null) {
-      throw const AuthException('Đăng nhập chưa tạo phiên — thử lại');
+      throw const AuthException('Sign-in did not create a session — try again');
     }
     return _profileOrClaims(session);
   }
@@ -134,7 +134,7 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<AuthSession> refreshSession() async {
     if (_auth.currentSession == null) {
-      throw const AuthException('Chưa có phiên đăng nhập');
+      throw const AuthException('No active session');
     }
     try {
       await _auth.refreshSession();
@@ -143,7 +143,7 @@ class SupabaseAuthRepository implements AuthRepository {
     }
     final supabase.Session? session = _auth.currentSession;
     if (session == null) {
-      throw const AuthException('Phiên đăng nhập đã hết hạn');
+      throw const AuthException('The session has expired');
     }
     return _profileOrClaims(session);
   }
@@ -198,7 +198,7 @@ class SupabaseAuthRepository implements AuthRepository {
           accessToken: accessToken,
         );
       }
-      throw const NetworkException('Phản hồi máy chủ không đúng định dạng');
+      throw const NetworkException('Unexpected server response format');
     } on DioException catch (e) {
       throw mapDioException(e);
     }
@@ -224,29 +224,29 @@ class SupabaseAuthRepository implements AuthRepository {
   Exception _mapAuthError(supabase.AuthException e) {
     final String raw = e.message.toLowerCase();
     if (raw.contains('already registered')) {
-      return const AuthException('Email đã được đăng ký');
+      return const AuthException('This email is already registered');
     }
     if (raw.contains('invalid login credentials') ||
         raw.contains('invalid email or password')) {
-      return const AuthException('Email hoặc mật khẩu không đúng');
+      return const AuthException('Incorrect email or password');
     }
     if (raw.contains('email not confirmed')) {
       return const AuthException(
-        'Chưa xác nhận email — hãy mở hộp thư và bấm link xác nhận',
+        'Email not confirmed — open your inbox and click the confirmation link',
         needsEmailConfirmation: true,
       );
     }
     // Gói free của Supabase giới hạn số email gửi mỗi giờ (đăng ký/reset)
     if (raw.contains('rate limit')) {
       return const AuthException(
-        'Máy chủ đăng nhập đang giới hạn gửi email — đợi ít phút rồi thử lại',
+        'The sign-in server is rate limiting emails — wait a few minutes and try again',
       );
     }
     if (raw.contains('failed to fetch') || raw.contains('network')) {
-      return const NetworkException('Không kết nối được máy chủ đăng nhập');
+      return const NetworkException('Could not connect to the sign-in server');
     }
     if (raw.contains('refresh_token') || raw.contains('jwt expired')) {
-      return const AuthException('Phiên đăng nhập đã hết hạn');
+      return const AuthException('The session has expired');
     }
     return AuthException(e.message);
   }

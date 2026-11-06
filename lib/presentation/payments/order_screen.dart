@@ -58,14 +58,14 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
     Clipboard.setData(ClipboardData(text: value));
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text('Đã copy $label')));
+      ..showSnackBar(SnackBar(content: Text('Copied $label')));
   }
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Thanh toán')),
+      appBar: AppBar(title: const Text('Payment')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         child: _order.isPaid ? _buildPaid(theme) : _buildPending(theme),
@@ -87,15 +87,15 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'Đang chờ chuyển khoản…',
+              'Waiting for the transfer…',
               style: theme.textTheme.titleMedium,
             ),
           ],
         ),
         const SizedBox(height: 4),
         Text(
-          'Quét QR hoặc chuyển khoản đúng nội dung bên dưới — credit tự động '
-          'vào tài khoản sau vài giây.',
+          'Scan the QR code or transfer with the exact content below — credits are '
+          'added to your account within seconds.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
@@ -115,7 +115,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
                   width: 220,
                   height: 90,
                   child: Center(
-                    child: Text('Không tải được ảnh QR — dùng thông tin bên dưới'),
+                    child: Text('Could not load the QR image — use the details below'),
                   ),
                 ),
               ),
@@ -126,8 +126,8 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'Ảnh QR chưa sẵn sàng (backend thiếu SEPAY_BANK_ACCOUNT) — '
-              'chuyển khoản theo thông tin bên dưới.',
+              'QR image is not available yet (the backend is missing SEPAY_BANK_ACCOUNT) — '
+              'transfer using the details below.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -143,40 +143,40 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
                 _infoRow(
                   theme,
                   icon: Icons.account_balance,
-                  label: 'Ngân hàng',
+                  label: 'Bank',
                   value: _order.bankBin.isEmpty ? 'MB Bank' : _order.bankBin,
                 ),
                 if (_order.accountName.isNotEmpty)
                   _infoRow(
                     theme,
                     icon: Icons.person_outline,
-                    label: 'Chủ tài khoản',
+                    label: 'Account holder',
                     value: _order.accountName,
                   ),
                 if (_order.bankAccount.isNotEmpty)
                   _infoRow(
                     theme,
                     icon: Icons.credit_card,
-                    label: 'Số tài khoản',
+                    label: 'Account number',
                     value: _order.bankAccount,
-                    onCopy: () => _copy(_order.bankAccount, 'số tài khoản'),
+                    onCopy: () => _copy(_order.bankAccount, 'account number'),
                   ),
                 _infoRow(
                   theme,
                   icon: Icons.payments_outlined,
-                  label: 'Số tiền',
+                  label: 'Amount',
                   value: formatVnd(_order.amountVnd),
                   onCopy: () =>
-                      _copy(_order.amountVnd.toString(), 'số tiền'),
+                      _copy(_order.amountVnd.toString(), 'amount'),
                 ),
                 _infoRow(
                   theme,
                   icon: Icons.sticky_note_2_outlined,
-                  label: 'Nội dung chuyển khoản',
+                  label: 'Transfer content',
                   value: _order.transferContent,
                   highlight: true,
                   onCopy: () =>
-                      _copy(_order.transferContent, 'nội dung chuyển khoản'),
+                      _copy(_order.transferContent, 'transfer content'),
                 ),
               ],
             ),
@@ -184,7 +184,7 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Chuyển KHÔNG đúng số tiền hoặc thiếu mã đơn sẽ không được cộng credit.',
+          'A transfer with the wrong amount or without the order code will not add credits.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outline,
@@ -252,17 +252,17 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
           size: 72,
         ),
         const SizedBox(height: 12),
-        Text('Thanh toán thành công!', style: theme.textTheme.titleLarge),
+        Text('Payment successful!', style: theme.textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Đã cộng ${formatCredits(_order.credits)} credit vào tài khoản.',
+          'Added ${formatCredits(_order.credits)} credits to your account.',
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 24),
         FilledButton.icon(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.done),
-          label: const Text('Hoàn tất'),
+          label: const Text('Done'),
         ),
       ],
     );

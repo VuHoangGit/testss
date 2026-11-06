@@ -33,7 +33,7 @@ _PDF_MIME = "application/pdf"
 def _get_owned_document(db: DatabaseSession, document_id: uuid.UUID, user_id) -> Document:
     doc = db.get(Document, document_id)
     if doc is None or doc.owner_id != user_id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+        raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
 
@@ -110,16 +110,16 @@ async def upload_document(
     if folder_id is not None:
         folder = db.get(Folder, folder_id)
         if folder is None or folder.owner_id != user.id:
-            raise HTTPException(status_code=404, detail="Không tìm thấy thư mục đích")
+            raise HTTPException(status_code=404, detail="Target folder not found")
 
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     data = await file.read()
     if len(data) > max_bytes:
         raise HTTPException(
-            status_code=413, detail=f"File vượt quá {get_settings().max_upload_mb} MB"
+            status_code=413, detail=f"File exceeds {get_settings().max_upload_mb} MB"
         )
     if not data:
-        raise HTTPException(status_code=400, detail="File rỗng")
+        raise HTTPException(status_code=400, detail="File is empty")
 
     name = (file.filename or "khong-ten").strip()[:255]
     mime = file.content_type or "application/octet-stream"
@@ -178,9 +178,9 @@ def download_document(
     try:
         path = storage_service.document_path(doc.storage_key)
     except ValueError as exc:
-        raise HTTPException(status_code=500, detail="Storage key không hợp lệ") from exc
+        raise HTTPException(status_code=500, detail="Invalid storage key") from exc
     if not path.exists():
-        raise HTTPException(status_code=410, detail="File không còn trên máy chủ")
+        raise HTTPException(status_code=410, detail="File is no longer available on the server")
     return FileResponse(path, filename=doc.original_name, media_type=doc.mime_type)
 
 
@@ -193,7 +193,7 @@ def delete_document(
     storage_service.delete_document_file(doc.storage_key)
     db.delete(doc)
     db.commit()
-    return {"detail": "Đã xóa tài liệu"}
+    return {"detail": "Document deleted"}
 
 
 @router.post("/merge", response_model=DocumentOut, status_code=201)
@@ -204,7 +204,7 @@ def merge_documents(body: MergeRequest, db: DbSession, current: CurrentUser) -> 
     parts = []
     for doc in docs:
         if doc.mime_type != _PDF_MIME:
-            raise HTTPException(status_code=400, detail=f"{doc.original_name} không phải PDF")
+            raise HTTPException(status_code=400, detail=f"{doc.original_name} is not a PDF")
         parts.append(storage_service.read_document_bytes(doc.storage_key))
     try:
         merged = pdf_service.merge_pdfs(parts)
@@ -227,12 +227,12 @@ def split_document(
     user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ tách file PDF")
+        raise HTTPException(status_code=400, detail="Only PDF files can be split")
     data = storage_service.read_document_bytes(doc.storage_key)
 
     total = pdf_service.pdf_page_count(data)
     if total is None:
-        raise HTTPException(status_code=400, detail="File PDF không đọc được")
+        raise HTTPException(status_code=400, detail="The PDF file cannot be read")
     try:
         ranges = pdf_service.parse_page_ranges(body.ranges, total)
         parts = pdf_service.split_pdf(data, ranges)
@@ -261,7 +261,7 @@ def protect_document(
     user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file PDF")
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
     data = storage_service.read_document_bytes(doc.storage_key)
     # Đếm trang TRƯỚC khi mã hóa — PDF mã hóa đọc được số trang khó
     total_pages = pdf_service.pdf_page_count(data)
@@ -288,7 +288,7 @@ def unprotect_document(
     user = current
     doc = _get_owned_document(db, document_id, user.id)
     if doc.mime_type != _PDF_MIME:
-        raise HTTPException(status_code=400, detail="Chỉ hỗ trợ file PDF")
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
     data = storage_service.read_document_bytes(doc.storage_key)
     try:
         unprotected = pdf_service.unprotect_pdf(data, body.password)

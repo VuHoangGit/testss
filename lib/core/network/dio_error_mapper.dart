@@ -18,22 +18,22 @@ String? extractDetail(Object? data) {
 
 Exception mapDioException(
   DioException e, {
-  String fallback = 'Có lỗi xảy ra, thử lại sau',
+  String fallback = 'Something went wrong, please try again later',
 }) {
   final int? code = e.response?.statusCode;
   if (code == 402) {
     // Hết credit — không phải lỗi phiên: giữ nguyên detail hướng dẫn nạp
     return InsufficientCreditsException(
-      extractDetail(e.response?.data) ?? 'Không đủ credit để dùng tính năng AI',
+      extractDetail(e.response?.data) ?? 'Not enough credits to use AI features',
     );
   }
   if (code == 401 || code == 403) {
     return AuthException(
-      extractDetail(e.response?.data) ?? 'Phiên đăng nhập không hợp lệ',
+      extractDetail(e.response?.data) ?? 'Invalid session',
     );
   }
   if (code != null && code >= 500) {
-    return const NetworkException('Máy chủ đang gặp sự cố, thử lại sau');
+    return const NetworkException('The server is having problems, please try again later');
   }
   switch (e.type) {
     case DioExceptionType.connectionTimeout:

@@ -34,7 +34,16 @@ class Settings(BaseSettings):
     anthropic_auth_token: str = ""
     anthropic_base_url: str = "https://api.z.ai/api/anthropic"
     anthropic_model: str = "glm-4.6"
+    # Model đọc ẢNH cho OCR trang scan. Rỗng = dùng chung ANTHROPIC_MODEL; cần
+    # đặt riêng khi model văn bản không nhận block ảnh (vd key z.ai chỉ có
+    # nhóm mg::text thì OCR trang scan báo lỗi cấu hình rõ ràng).
+    ocr_vision_model: str = ""
     anthropic_timeout_seconds: int = 90
+    # OCR: mỗi trang là 1 lượt gọi AI. Giới hạn số trang mỗi lần OCR để chặn
+    # tài liệu quá dài làm treo request (phần dư bị bỏ và có cảnh báo).
+    ocr_max_pages: int = 20
+    # DPI render trang PDF scan trước khi gửi AI (200 DPI ≈ cạnh dài 1654px/trang A4).
+    ocr_dpi: int = 200
     # Secret dùng để xác thực request webhook từ SePay.
     sepay_webhook_secret: str = ""
     # Tài khoản nhận tiền (từ trang quản lý SePay) — dùng dựng QR VietQR.

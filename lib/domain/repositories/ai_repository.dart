@@ -1,10 +1,37 @@
 import 'dart:typed_data';
 
+/// Nội dung một trang tài liệu sau OCR.
+class OcrPage {
+  const OcrPage({
+    required this.page,
+    required this.text,
+    this.fromTextLayer = false,
+  });
+
+  /// Số trang, bắt đầu từ 1.
+  final int page;
+  final String text;
+
+  /// True = chữ lấy từ lớp text của PDF (không gọi AI); false = AI đọc ảnh.
+  final bool fromTextLayer;
+}
+
 class OcrResult {
-  const OcrResult({required this.text, required this.keyValues});
+  const OcrResult({
+    required this.text,
+    required this.keyValues,
+    this.pages = const <OcrPage>[],
+    this.warnings = const <String>[],
+  });
 
   final String text;
   final Map<String, String> keyValues;
+
+  /// Nội dung từng trang (rỗng với client cũ / khi server chỉ trả text).
+  final List<OcrPage> pages;
+
+  /// Cảnh báo hậu kiểm: chỗ không đọc được, ngày/số tiền nghi sai…
+  final List<String> warnings;
 }
 
 /// Thư mục trong ngữ cảnh gửi kèm lệnh giọng nói (chỉ tên + id).

@@ -1,125 +1,129 @@
-# Luồng chức năng ra lệnh bằng giọng nói tiếng Việt
+# English voice command flows
 
-Tài liệu mô tả các luồng đã triển khai của trợ lý giọng nói trong DocuVault:
-STT (Web Speech API) → Gemini Function Calling → thực thi action trên client → TTS phản hồi.
+This document describes the implemented flows of the DocuVault voice assistant:
+STT (Web Speech API, `en-US`) → LLM tool use → client-side action execution → TTS reply.
+Everything the user hears or reads from the assistant is English.
 
-## 1. Luồng tổng quan (push-to-talk đầu cuối)
+## 1. End-to-end push-to-talk flow
 
 ```mermaid
 sequenceDiagram
-    actor U as Người dùng
+    actor U as User
     participant Mic as VoiceMicButton (AppBar)
     participant VC as VoiceController
-    participant STT as SpeechService (speech_to_text)
+    participant STT as SpeechService (speech_to_text, en-US)
     participant API as FastAPI /ai/voice-command
     participant SVC as VoiceCommandService
-    participant GEM as Gemini (function calling)
+    participant LLM as Anthropic Messages API (tool use)
     participant EXE as VoiceActionExecutor
-    participant TTS as TtsService (flutter_tts)
+    participant TTS as TtsService (flutter_tts, en-US)
 
-    U->>Mic: Bấm nút mic (user gesture)
+    U->>Mic: Press the mic button (user gesture)
     Mic->>VC: toggleMic()
-    VC->>STT: initialize() + listen(locale: vi-VN)
-    STT-->>VC: interim results (hiển thị "Đang nghe…")
-    U->>STT: Nói lệnh tiếng Việt
-    STT-->>VC: Kết quả final (transcript)
-    VC->>API: POST transcript + context (tên tab/folder/tài liệu) + session_id
+    VC->>STT: initialize() + listen(locale: en-US)
+    STT-->>VC: interim results ("Listening…")
+    U->>STT: Say an English command
+    STT-->>VC: final transcript
+    VC->>API: POST transcript + context (tab/folder/document names) + session_id
     API->>SVC: interpret()
-    SVC->>GEM: prompt hệ thống + function declarations
-    GEM-->>SVC: functionCall {action, params} hoặc text
-    SVC-->>API: VoiceCommandResponse (đã validate)
+    SVC->>LLM: system prompt + tool declarations
+    LLM-->>SVC: tool_use {name, input} or plain text
+    SVC-->>API: VoiceCommandResponse (validated)
     API-->>VC: VoiceCommandResult
     VC->>EXE: executeVoiceAction(ref, decision)
-    EXE-->>VC: Câu phản hồi cuối
-    VC-->>U: Hiển thị trên VoicePanel
-    VC->>TTS: speak(phản hồi) — nếu TTS bật
-    TTS-->>U: Đọc phản hồi bằng tiếng Việt
+    EXE-->>VC: final reply sentence
+    VC-->>U: Shown in VoicePanel
+    VC->>TTS: speak(reply) — when TTS is enabled
+    TTS-->>U: Reads the reply in English
 ```
 
-## 2. Luồng backend — Gemini Function Calling
+## 2. Backend — LLM tool use
 
 ```mermaid
 flowchart TD
-    A[POST /ai/voice-command<br/>transcript + context + session_id] --> B[Xây prompt hệ thống:<br/>danh sách 13 action + tên tab/folder/tài liệu<br/>KHÔNG gửi id]
-    B --> C[Gọi generateContent<br/>kèm tools.functionDeclarations]
-    C --> D{Gemini trả về gì?}
-    D -- functionCall --> E{Action + params<br/>hợp lệ?}
-    E -- Có --> F[Trả VoiceCommandResponse<br/>action + params + reply]
-    E -- Không<br/>enum sai / thiếu param --> G[Trả kèm lỗi trong reply<br/>không thực thi]
-    D -- Chỉ text --> H[Trả reply dạng hội thoại<br/>action = null]
-    D -- Lỗi infra<br/>timeout / không key / 5xx --> I[Ném VoiceCommandError<br/>API trả 503 + thông báo tiếng Việt]
-    F --> J[Ghi lịch sử hội thoại<br/>tối đa 10 lượt / session]
+    A[POST /ai/voice-command<br/>transcript + context + session_id] --> B[Build system prompt:<br/>13 actions + tab/folder/document names<br/>NEVER sends ids]
+    B --> C[Call the Messages endpoint<br/>with tools.functionDeclarations]
+    C --> D{What did the model return?}
+    D -- tool_use --> E{Action + params<br/>valid?}
+    E -- Yes --> F[Return VoiceCommandResponse<br/>action + params + reply]
+    E -- No<br/>bad enum / missing param --> G[Return the error in reply<br/>nothing is executed]
+    D -- Text only --> H[Return a conversational reply<br/>action = null]
+    D -- Infra error<br/>timeout / no token / 5xx --> I[Raise VoiceCommandError<br/>API returns 503 + English message]
+    F --> J[Store conversation history<br/>max 10 turns per session]
 ```
 
-Điểm chính:
-- **Whitelist 13 action**: `navigate_tab`, `open_ai_tool`, `select_folder`, `list_documents`, `open_document`, `run_ocr`, `ask_chat`, `translate_text`, `read_aloud`, `stop_speaking`, `delete_document`, `merge_documents`, `split_document`.
-- Gemini chỉ thấy **tên** thư mục/tài liệu — không bao giờ thấy id; việc ánh xạ tên → id làm ở client nên AI không thể "mò" id.
-- Lịch sử hội thoại giữ in-memory theo `session_id` (tối đa 10 lượt) để hỗ trợ lệnh tiếp theo kiểu "mở file vừa rồi".
+Key points:
+- **13-action whitelist**: `navigate_tab`, `open_ai_tool`, `select_folder`, `list_documents`, `open_document`, `run_ocr`, `ask_chat`, `translate_text`, `read_aloud`, `stop_speaking`, `delete_document`, `merge_documents`, `split_document`.
+- The model only sees folder/document **names** — never ids; name → id mapping happens on the client, so the AI cannot guess ids.
+- Conversation history is kept in memory per `session_id` (max 10 turns) so follow-ups like "open the file I just mentioned" work.
+- Provider config lives in `.env`: `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`.
 
-## 3. Luồng thực thi action + resolve tên tài liệu (client)
+## 3. Client — action execution and document name resolution
 
 ```mermaid
 flowchart TD
     A[executeVoiceAction] --> B{Action}
-    B -- navigate_tab / open_ai_tool --> C[Đổi tab provider<br/>đóng PDF viewer nếu đang mở]
-    B -- list_documents / select_folder --> D[Lọc / đọc danh sách<br/>từ DocumentsController]
-    B -- open_document / run_ocr /<br/>ask_chat / translate_text --> E[Gọi repository tương ứng<br/>cập nhật state AI]
-    B -- read_aloud / stop_speaking --> F[Đọc kết quả gần nhất / dừng TTS]
-    B -- delete / merge / split --> G[Nhóm cần xác nhận — xem luồng 4]
-    B -- Action lạ --> H[Không thực thi,<br/>trả "chưa được hỗ trợ"]
+    B -- navigate_tab / open_ai_tool --> C[Switch tab provider<br/>close the PDF viewer if open]
+    B -- list_documents / select_folder --> D[Filter / read the list<br/>from DocumentsController]
+    B -- open_document / run_ocr /<br/>ask_chat / translate_text --> E[Call the matching repository<br/>update AI state]
+    B -- read_aloud / stop_speaking --> F[Read the latest result / stop TTS]
+    B -- delete / merge / split --> G[Needs confirmation — see flow 4]
+    B -- Unknown action --> H[Nothing executed,<br/>reply "not supported by voice"]
 ```
 
 ```mermaid
 flowchart TD
-    A[Tham số tên tài liệu<br/>vd: "hợp đồng"] --> B[name_matcher:<br/>bỏ dấu tiếng Việt, chuẩn hóa]
-    B --> C{Kết quả khớp}
-    C -- Unique --> D[Dùng tài liệu đó]
-    C -- Ambiguous<br/>nhiều file gần giống --> E[Trả lời liệt kê các ứng viên,<br/>yêu cầu nói lại tên đủ]
-    C -- None --> F["Không tìm thấy tài liệu" + gợi ý gần giống]
-    E --> G[Người dùng nói lại → lặp lại luồng]
+    A[Document name parameter<br/>e.g. "contract"] --> B[name_matcher:<br/>strip Vietnamese diacritics, normalize]
+    B --> C{Match result}
+    C -- Unique --> D[Use that document]
+    C -- Ambiguous<br/>several similar files --> E[Reply with the candidates,<br/>ask for the full name]
+    C -- None --> F["No document named …" + similar names]
+    E --> G[User repeats the command → flow restarts]
 ```
 
-## 4. Luồng hành động phá hủy (xóa / gộp / tách) — luôn xác nhận
+## 4. Destructive actions (delete / merge / split) — always confirmed
 
 ```mermaid
 sequenceDiagram
-    actor U as Người dùng
+    actor U as User
     participant EXE as VoiceActionExecutor
     participant DLG as Dialog (root navigator)
 
-    U->>EXE: "xóa file hợp đồng"
-    EXE->>EXE: resolve tên → tài liệu (unique)
-    alt Không khớp duy nhất
-        EXE-->>U: Yêu cầu nói lại tên chính xác (dừng)
-    else Khớp duy nhất
-        EXE->>DLG: AlertDialog "Xóa tài liệu?" + tên file
-        DLG-->>U: Bấm "Xóa" hoặc "Hủy"
-        alt Bấm Xóa
-            DLG->>EXE: true → gọi deleteDocument(id)
-            EXE-->>U: "Đã xóa …"
-        else Bấm Hủy / đóng dialog
-            EXE-->>U: "Đã hủy lệnh xóa."
+    U->>EXE: "delete the contract file"
+    EXE->>EXE: resolve name → document (unique)
+    alt Not a unique match
+        EXE-->>U: Ask for the exact name (stop)
+    else Unique match
+        EXE->>DLG: AlertDialog "Delete document?" + file name
+        DLG-->>U: Press "Delete" or "Cancel"
+        alt Pressed Delete
+            DLG->>EXE: true → deleteDocument(id)
+            EXE-->>U: "Deleted …"
+        else Pressed Cancel / dismissed
+            EXE-->>U: "Delete cancelled."
         end
     end
 ```
 
-- **Gộp (merge)**: resolve từng tên → nếu thiếu <2 PDF thì yêu cầu nói lại; dialog tự điền tên file gộp (AI có thể gợi ý `new_name`) → người dùng sửa/bấm tay.
-- **Tách (split)**: dialog tự điền dải trang (`ranges`) từ params AI → người dùng duyệt rồi mới thực thi.
+- **Merge**: resolves each name → if fewer than 2 PDFs, asks again; the dialog pre-fills the merged file name (the model may suggest `new_name`) → the user reviews or edits it.
+- **Split**: the dialog pre-fills the page `ranges` from the model params → the user reviews before it runs.
 
-## 5. Luồng lỗi
+## 5. Error flows
 
 ```mermaid
 flowchart TD
-    A[Lỗi] --> B{Loại}
-    B -- Không cấp quyền micro --> C[Gợi ý mở cài đặt trình duyệt,<br/>chỉ dùng ô nhập văn bản]
-    B -- Không nghe rõ<br/>transcript < 2 ký tự --> D["Không nghe rõ, bạn thử nói lại nhé"]
-    B -- Backend 503<br/>không có GEMINI_API_KEY / lỗi Gemini --> E[Thông báo lỗi tiếng Việt,<br/>đề xuất thử lại]
-    B -- Lỗi khi thực thi action<br/>vd OCR fail --> F["Thao tác thất bại: …"<br/>không crash app]
-    B -- Mic không khả dụng<br/>trình duyệt không hỗ trợ --> G[micAvailable = false,<br/>vẫn nhập lệnh bằng văn bản]
+    A[Error] --> B{Type}
+    B -- Microphone permission denied --> C[Point to browser settings,<br/>fall back to the text box]
+    B -- Not understood<br/>transcript < 2 chars --> D["I did not catch that, please try again."]
+    B -- Backend 503<br/>missing token / provider error --> E[English error message,<br/>suggest retrying]
+    B -- Action failed<br/>e.g. OCR error --> F["Action failed: …"<br/>app never crashes]
+    B -- Microphone unavailable<br/>browser unsupported --> G[micAvailable = false,<br/>text commands still work]
 ```
 
-Mọi lỗi đều được bắt trong `VoiceController` / `executeVoiceAction` — app không bao giờ crash vì lệnh giọng nói.
+Every error is caught inside `VoiceController` / `executeVoiceAction` — the app never crashes because of a voice command.
 
-## 6. Fallback nhập lệnh bằng văn bản
+## 6. Text-command fallback
 
-Khi mic không dùng được (không cấp quyền, trình duyệt không hỗ trợ Web Speech API) hoặc người dùng không muốn nói, VoicePanel có ô nhập lệnh: gõ `"vào tab tài liệu"`, `"quét OCR file hợp đồng"`… → đi thẳng vào `_process()` giống transcript từ mic (bỏ qua bước STT).
+When the mic is unavailable (permission denied, browser without Web Speech API) or the user prefers typing,
+VoicePanel offers a text field: type `"go to the documents tab"`, `"run OCR on the contract file"`, …
+Those commands go straight into `_process()` exactly like a mic transcript (the STT step is skipped).

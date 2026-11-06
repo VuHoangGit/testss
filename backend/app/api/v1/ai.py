@@ -1,5 +1,6 @@
 """OCR, Key-Value, dịch vùng chọn, chatbot tài liệu + lưu hội thoại chat."""
 
+import dataclasses
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -17,12 +18,21 @@ from app.schemas.ai import (
     ConversationOut,
     ExtractTextResult,
     MessageOut,
+    OcrPageOut,
+    OcrRequest,
     OCRResult,
+    OcrStructuredOut,
     TranslationRequest,
     TranslationResult,
 )
 from app.schemas.voice import VoiceCommandRequest, VoiceCommandResponse
-from app.services import ai_service, credit_service, storage_service, voice_command_service
+from app.services import (
+    ai_service,
+    credit_service,
+    ocr_service,
+    storage_service,
+    voice_command_service,
+)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -38,30 +48,58 @@ def _charge_ai(db, user) -> None:
 def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
     document = db.get(Document, document_id)
     if document is None or document.owner_id != user_id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
+        raise HTTPException(status_code=404, detail="Document not found")
     return document
 
 
 def _own_conversation(db, conversation_id: uuid.UUID, user_id) -> AiConversation:
     conversation = db.get(AiConversation, conversation_id)
     if conversation is None or conversation.user_id != user_id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy hội thoại")
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
+def _ocr_document(document: Document, body: OcrRequest | None) -> ocr_service.OcrOutcome:
+    """Chạy OCR cho 1 tài liệu; tuỳ chọn client ghi đè loại/ngôn ngữ/thuật ngữ."""
+    options = ocr_service.default_options()
+    if body is not None:
+        options = dataclasses.replace(
+            options,
+            doc_type=body.doc_type.strip() or options.doc_type,
+            language=body.language.strip() or options.language,
+            glossary=body.glossary.strip(),
+        )
+    return ocr_service.ocr_document_bytes(
+        storage_service.read_document_bytes(document.storage_key),
+        document.mime_type,
+        document.original_name,
+        options,
+    )
+
+
 @router.post("/ocr/{document_id}", response_model=OCRResult)
-def ocr(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> OCRResult:
+def ocr(
+    document_id: uuid.UUID,
+    db: DbSession,
+    current: CurrentUser,
+    body: OcrRequest | None = None,
+) -> OCRResult:
+    """OCR tài liệu (từng trang) → văn bản + trường dữ liệu + cảnh báo đối soát."""
     user = current
     document = _owned_document(db, document_id, user.id)
     _charge_ai(db, user)
     try:
-        text = ai_service.ocr_document(
-            storage_service.read_document_bytes(document.storage_key), document.mime_type
-        )
-        return OCRResult(text=text, key_values=ai_service.extract_key_values(text))
+        outcome = _ocr_document(document, body)
     except ai_service.AIServiceError as exc:
         credit_service.refund(db, user)  # lỗi AI — hoàn credit lượt này
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return OCRResult(
+        text=outcome.text,
+        key_values=outcome.key_values,
+        pages=[OcrPageOut(page=p.page, text=p.text, source=p.source) for p in outcome.pages],
+        data=OcrStructuredOut(**outcome.structured),
+        warnings=outcome.warnings,
+    )
 
 
 @router.post("/ocr/{document_id}/word")
@@ -70,10 +108,9 @@ def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Res
     document = _owned_document(db, document_id, user.id)
     _charge_ai(db, user)
     try:
-        text = ai_service.ocr_document(
-            storage_service.read_document_bytes(document.storage_key), document.mime_type
+        content = ai_service.make_word_document(
+            _ocr_document(document, None).text, title=document.original_name
         )
-        content = ai_service.make_word_document(text)
     except ai_service.AIServiceError as exc:
         credit_service.refund(db, user)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -96,8 +133,8 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
         raise HTTPException(
             status_code=415,
             detail=(
-                "Chưa hỗ trợ đọc loại file này "
-                "(hỗ trợ PDF, Word, txt/md và file văn bản)"
+                "This file type cannot be read "
+                "(supported: PDF, Word, txt/md and plain text)"
             ),
         )
     try:
@@ -111,7 +148,7 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
     if not text:
         raise HTTPException(
             status_code=422,
-            detail="Không trích được văn bản từ file (PDF scan? Hãy dùng OCR)",
+            detail="Could not extract text from the file (scanned PDF? Use OCR instead)",
         )
     return ExtractTextResult(text=text)
 
@@ -140,7 +177,7 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
     try:
         ids = [uuid.UUID(value) for value in body.document_ids]
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail="document_ids không hợp lệ") from exc
+        raise HTTPException(status_code=422, detail="Invalid document_ids") from exc
     context_parts: list[str] = []
     documents: list[Document] = []
     for document_id in ids:
@@ -153,7 +190,7 @@ def chat(body: ChatRequest, db: DbSession, current: CurrentUser) -> ChatResult:
             if text:
                 context_parts.append(text)
     if not context_parts:
-        raise HTTPException(status_code=400, detail="Chọn ít nhất một PDF có nội dung văn bản")
+        raise HTTPException(status_code=400, detail="Select at least one PDF that contains text")
     _charge_ai(db, user)
     try:
         answer = ai_service.answer_question("\n\n".join(context_parts), body.question)
@@ -243,7 +280,7 @@ def delete_conversation(
     conversation = _own_conversation(db, conversation_id, user.id)
     db.delete(conversation)
     db.commit()
-    return {"detail": "Đã xóa hội thoại"}
+    return {"detail": "Conversation deleted"}
 
 
 @router.post("/voice-command", response_model=VoiceCommandResponse)

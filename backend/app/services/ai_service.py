@@ -5,16 +5,18 @@ Chạy qua endpoint tương thích Anthropic (vd GLM của z.ai) — cấu hình
 đọc từ cấu hình server, không bao giờ nhận từ client hay trả về trong response.
 """
 
-import base64
 import io
-import json
-from collections.abc import Mapping
 
 import requests
 from docx import Document as WordDocument
 from pypdf import PdfReader
 
 from app.core.config import get_settings
+from app.services import docx_service
+
+# Dòng dài hơn mức này hiếm khi là tiêu đề (dễ là đoạn văn bị ngắt dòng) →
+# không nâng thành heading dù cỡ chữ to.
+_MAX_HEADING_LINE_CHARS = 200
 
 
 class AIServiceError(Exception):
@@ -24,12 +26,12 @@ class AIServiceError(Exception):
 def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
     """POST payload tuỳ ý tới POST {base_url}/v1/messages, trả JSON đầy đủ.
 
-    Dùng chung cho các tác vụ chỉ cần text (qua _request_anthropic) và tác vụ
+    Dùng chung cho các tác vụ chỉ cần text (qua request_anthropic) và tác vụ
     cần tool use (voice command) — cùng một chỗ xử lý lỗi/timeout.
     """
     settings = get_settings()
     if not settings.anthropic_auth_token:
-        raise AIServiceError("AI chưa được cấu hình ANTHROPIC_AUTH_TOKEN trên backend")
+        raise AIServiceError("AI is not configured: ANTHROPIC_AUTH_TOKEN is missing on the backend")
     url = f"{settings.anthropic_base_url.rstrip('/')}/v1/messages"
     try:
         response = requests.post(
@@ -45,107 +47,235 @@ def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
         return response.json()
     except requests.RequestException as exc:
         status = getattr(exc.response, "status_code", None)
+        detail = _error_message(exc.response)
+        # 403 có thể là key hết hạn, hoặc key KHÔNG được cấp quyền model này
+        # (z.ai: "key not allowed to access model … models=['mg::text']").
+        if status in (401, 403) and "model" in detail.lower():
+            model = str(payload.get("model") or settings.anthropic_model)
+            raise AIServiceError(
+                f"The AI key is not allowed to use model '{model}' "
+                f"({detail}). Use a key with access to that model, or change "
+                "ANTHROPIC_MODEL / OCR_VISION_MODEL in .env."
+            ) from exc
         if status in (401, 403):
             raise AIServiceError(
-                "ANTHROPIC_AUTH_TOKEN không hợp lệ hoặc đã bị thu hồi"
+                "ANTHROPIC_AUTH_TOKEN is invalid or has been revoked"
             ) from exc
         if status == 404:
             raise AIServiceError(
-                f"Không tìm thấy model '{settings.anthropic_model}' trên dịch vụ AI"
+                f"Model '{settings.anthropic_model}' was not found on the AI service"
             ) from exc
-        raise AIServiceError("Không kết nối được dịch vụ AI") from exc
+        # Model text-only nhận block ảnh → từ chối ngay (GLM: "content.type is
+        # invalid, allowed values: ['text']").
+        if status == 400 and "image" not in detail.lower() and (
+            "content.type is invalid" in detail or "allowed values: ['text']" in detail
+        ):
+            model = str(payload.get("model") or settings.anthropic_model)
+            raise AIServiceError(
+                f"Model '{model}' cannot read images (text only), so scanned "
+                "pages cannot be OCR'd. Set OCR_VISION_MODEL in .env to a "
+                "vision-capable model."
+            ) from exc
+        raise AIServiceError("Could not connect to the AI service") from exc
     except ValueError as exc:
-        raise AIServiceError("Dịch vụ AI trả về dữ liệu không hợp lệ") from exc
+        raise AIServiceError("The AI service returned invalid data") from exc
 
 
-def _request_anthropic(content: list[dict[str, object]]) -> str:
+def _error_message(response: object) -> str:
+    """Lấy `error.message` trong body lỗi của dịch vụ AI ('' nếu không có)."""
+    try:
+        body = response.json()  # type: ignore[attr-defined]
+    except (ValueError, AttributeError):
+        return ""
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str):
+                return message
+    return ""
+
+
+def request_anthropic(
+    content: list[dict[str, object]],
+    *,
+    system: str | None = None,
+    temperature: float | None = None,
+    max_tokens: int = 8192,
+    model: str | None = None,
+) -> str:
     """Gửi 1 lượt user (content blocks) và lấy block text đầu tiên.
 
     Bỏ qua block "thinking" — model GLM trả kèm block suy luận trước câu trả lời.
+    `system` = luật chung (OCR dùng để đặt bộ luật chép tài liệu);
+    `temperature=0` = tắt "sáng tạo" cho tác vụ cần chính xác từng con số;
+    `model` = ghi đè model cho riêng lượt này (OCR ảnh cần model vision).
     """
     settings = get_settings()
     payload: dict[str, object] = {
-        "model": settings.anthropic_model,
-        "max_tokens": 8192,
+        "model": model or settings.anthropic_model,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": content}],
     }
+    if system:
+        payload["system"] = system
+    if temperature is not None:
+        payload["temperature"] = temperature
     response = post_anthropic(payload)
     try:
         for block in response["content"]:
             if isinstance(block, dict) and block.get("type") == "text":
                 return str(block["text"])
     except (KeyError, TypeError) as exc:
-        raise AIServiceError("Dịch vụ AI không trả về nội dung") from exc
-    raise AIServiceError("Dịch vụ AI không trả về nội dung")
+        raise AIServiceError("The AI service returned no content") from exc
+    raise AIServiceError("The AI service returned no content")
 
 
-def extract_pdf_text(data: bytes) -> str:
+def extract_pdf_pages(data: bytes) -> list[str]:
+    """Văn bản lớp text của từng trang PDF (giữ chỉ số trang) — "" nếu trang scan.
+
+    Giữ riêng từng trang để OCR biết trang nào đã có chữ (khỏi gọi AI) và trang
+    nào là ảnh scan cần đọc bằng vision.
+    """
     try:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
-            raise AIServiceError("PDF đang được mã hóa, hãy gỡ mật khẩu trước")
-        return "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            raise AIServiceError("The PDF is encrypted, remove its password first")
+        return [(page.extract_text() or "").strip() for page in reader.pages]
     except AIServiceError:
         raise
     except Exception as exc:
-        raise AIServiceError("Không đọc được nội dung PDF") from exc
+        raise AIServiceError("Could not read the PDF content") from exc
 
 
-def ocr_document(data: bytes, mime_type: str) -> str:
-    if mime_type == "application/pdf":
-        text = extract_pdf_text(data)
-        if text:
-            return text
-    encoded = base64.b64encode(data).decode("ascii")
-    return _request_anthropic(
-        [
-            {
-                "type": "image",
-                "source": {"type": "base64", "media_type": mime_type, "data": encoded},
-            },
-            {
-                "type": "text",
-                "text": (
-                    "OCR tài liệu bằng tiếng Việt và tiếng Anh. Giữ thứ tự đọc, tiêu đề "
-                    "và xuống dòng. Chỉ trả nội dung."
-                )
-            },
-        ]
-    ).strip()
+def extract_pdf_text(data: bytes) -> str:
+    """Toàn bộ văn bản lớp text của PDF, các trang cách nhau 1 dòng trống."""
+    return "\n\n".join(page for page in extract_pdf_pages(data) if page).strip()
 
 
-def extract_key_values(text: str) -> dict[str, str]:
-    raw = _request_anthropic(
-        [
-            {
-                "type": "text",
-                "text": "Trích xuất các cặp key-value quan trọng. Chỉ trả JSON object:\n"
-                + text[:40000],
-            }
-        ]
-    ).strip()
+def extract_pdf_pages_markdown(data: bytes) -> list[str]:
+    """Như [extract_pdf_pages] nhưng giữ cấu trúc: dòng tiêu đề được đánh `#`/`##`.
+
+    `pypdf` trích chữ thuần nên mất hết thông tin cỡ chữ, dẫn tới bản xuất Word
+    không có outline level (mục lục rỗng). Ở đây đọc thêm cỡ chữ của từng dòng
+    rồi so với cỡ chữ thân văn bản (cỡ phổ biến nhất của cả tài liệu):
+
+    - lớn hơn ≥ 1.7 lần → tiêu đề cấp 1 (`#`)
+    - ≥ 1.3 lần → cấp 2 (`##`)
+    - ≥ 1.12 lần → cấp 3 (`###`)
+
+    Dùng cho luồng OCR; luồng dịch/tóm tắt vẫn dùng [extract_pdf_pages] để văn
+    bản gửi model không bị lẫn dấu Markdown.
+    """
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise AIServiceError("AI trả về Key-Value không phải JSON hợp lệ") from exc
-    if not isinstance(parsed, Mapping):
-        raise AIServiceError("AI trả về Key-Value sai định dạng")
-    return {str(key): str(value) for key, value in parsed.items()}
+        reader = PdfReader(io.BytesIO(data))
+        if reader.is_encrypted:
+            raise AIServiceError("The PDF is encrypted, remove its password first")
+        page_lines = [_safe_page_lines(page) for page in reader.pages]
+        body_size = _body_font_size(page_lines)
+        pages: list[str] = []
+        for index, lines in enumerate(page_lines):
+            if lines:
+                pages.append(_lines_to_markdown(lines, body_size))
+            else:  # PDF lạ (font/toạ độ hỏng): quay về trích chữ thuần
+                pages.append((reader.pages[index].extract_text() or "").strip())
+        return pages
+    except AIServiceError:
+        raise
+    except Exception as exc:
+        raise AIServiceError("Could not read the PDF content") from exc
+
+
+def _safe_page_lines(page) -> list[tuple[str, float]]:
+    """[(dòng, cỡ chữ lớn nhất trong dòng)]; trang lỗi → [] để đi tiếp."""
+    try:
+        return _page_lines(page)
+    except Exception:  # noqa: BLE001 — pypdf ném nhiều loại lỗi khác nhau
+        return []
+
+
+def _page_lines(page) -> list[tuple[str, float]]:
+    """Ghép các mảnh chữ pypdf trả về thành dòng kèm cỡ chữ, đúng thứ tự đọc."""
+    lines: list[tuple[str, float]] = []
+    parts: list[str] = []
+    size = 0.0
+
+    def flush() -> None:
+        nonlocal parts, size
+        text = "".join(parts).strip()
+        if text:
+            lines.append((text, size))
+        parts = []
+        size = 0.0
+
+    def visitor(text: str, cm, tm, font_dict, font_size) -> None:  # noqa: ARG001
+        nonlocal size
+        chunks = (text or "").split("\n")
+        for position, chunk in enumerate(chunks):
+            if chunk:
+                parts.append(chunk)
+                size = max(size, float(font_size or 0))
+            if position < len(chunks) - 1:  # pypdf kết thúc mỗi dòng bằng "\n"
+                flush()
+
+    page.extract_text(visitor_text=visitor)
+    flush()
+    return lines
+
+
+def _body_font_size(page_lines: list[list[tuple[str, float]]]) -> float:
+    """Cỡ chữ thân văn bản = cỡ chiếm nhiều ký tự nhất trong cả tài liệu."""
+    weights: dict[float, int] = {}
+    for lines in page_lines:
+        for text, size in lines:
+            if size > 0:
+                key = round(size, 1)
+                weights[key] = weights.get(key, 0) + len(text)
+    if not weights:
+        return 0.0
+    return max(weights.items(), key=lambda item: item[1])[0]
+
+
+def _lines_to_markdown(lines: list[tuple[str, float]], body_size: float) -> str:
+    """Gắn `#`/`##`/`###` cho dòng tiêu đề, còn lại giữ nguyên."""
+    output: list[str] = []
+    for text, size in lines:
+        level = _heading_level(size, body_size) if len(text) <= _MAX_HEADING_LINE_CHARS else 0
+        output.append(f"{'#' * level} {text}" if level else text)
+    return "\n".join(output)
+
+
+def _heading_level(size: float, body_size: float) -> int:
+    """Cấp tiêu đề suy từ tỉ lệ cỡ chữ (0 = dòng thân văn bản).
+
+    Ngưỡng chọn theo tài liệu thật (thân 10pt): H1 ≈ 18pt (1.8×), H2 ≈ 14pt
+    (1.4×), H3 ≈ 12pt (1.2×).
+    """
+    if size <= 0 or body_size <= 0:
+        return 0
+    ratio = size / body_size
+    if ratio >= 1.7:
+        return 1
+    if ratio >= 1.3:
+        return 2
+    if ratio >= 1.12:
+        return 3
+    return 0
 
 
 def translate_selection(
     text: str, target_language: str, source_language: str | None = None
 ) -> str:
     source_hint = (
-        f" từ {source_language}" if source_language else ""
+        f" from {source_language}" if source_language else ""
     )
-    return _request_anthropic(
+    return request_anthropic(
         [
             {
                 "type": "text",
                 "text": (
-                    f"Dịch chính xác{source_hint} sang {target_language}. "
-                    f"Chỉ trả bản dịch:\n{text[:20000]}"
+                    f"Translate accurately{source_hint} into {target_language}. "
+                    f"Return the translation only:\n{text[:20000]}"
                 ),
             }
         ]
@@ -153,25 +283,25 @@ def translate_selection(
 
 
 def answer_question(context: str, question: str) -> str:
-    return _request_anthropic(
+    return request_anthropic(
         [{
             "type": "text",
             "text": (
-                "Bạn là trợ lý hỏi đáp tài liệu. Chỉ dùng CONTEXT. Nếu thiếu thông tin, nói rõ "
-                "không tìm thấy. Trả lời bằng tiếng Việt.\n\n"
+                "You are a document Q&A assistant. Use CONTEXT only. If information is missing, say "
+                "that it was not found. Answer in English.\n\n"
                 f"CONTEXT:\n{context[:60000]}\n\nCÂU HỎI:\n{question[:4000]}"
             )
         }]
     ).strip()
 
 
-def make_word_document(text: str) -> bytes:
-    document = WordDocument()
-    for paragraph in text.splitlines() or [""]:
-        document.add_paragraph(paragraph)
-    output = io.BytesIO()
-    document.save(output)
-    return output.getvalue()
+def make_word_document(text: str, *, title: str | None = None) -> bytes:
+    """Xuất văn bản OCR sang .docx **giữ cấu trúc** (heading/outline, bảng, list…).
+
+    Toàn bộ việc parse Markdown nhẹ → style Word nằm ở
+    [app.services.docx_service]; hàm này giữ nguyên tên cũ cho nơi gọi.
+    """
+    return docx_service.to_docx_bytes(text, title=title)
 
 
 # Loại file đọc được bằng trích xuất text thuần (không cần AI).
@@ -202,7 +332,7 @@ def extract_document_text(data: bytes, mime_type: str, name: str = "") -> str:
     """
     if not is_text_extractable(mime_type, name):
         raise AIServiceError(
-            "Chưa hỗ trợ đọc loại file này (hỗ trợ PDF, Word, txt/md và file văn bản)"
+            "This file type cannot be read (supported: PDF, Word, txt/md and plain text)"
         )
     if mime_type == "application/pdf":
         return extract_pdf_text(data)
@@ -215,8 +345,8 @@ def extract_document_text(data: bytes, mime_type: str, name: str = "") -> str:
         except AIServiceError:
             raise
         except Exception as exc:
-            raise AIServiceError("Không đọc được nội dung file Word") from exc
+            raise AIServiceError("Could not read the Word file content") from exc
     try:
         return data.decode("utf-8", errors="replace").strip()
     except Exception as exc:  # hiếm: decode với replace gần như không fail
-        raise AIServiceError("Không đọc được nội dung file văn bản") from exc
+        raise AIServiceError("Could not read the text file content") from exc

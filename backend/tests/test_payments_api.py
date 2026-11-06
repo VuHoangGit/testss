@@ -123,7 +123,7 @@ def test_create_order_for_smallest_package(client: TestClient, make_token) -> No
     assert order["amount_vnd"] == 10_000
     assert order["credits"] == 50
     assert order["status"] == "pending"
-    assert order["transfer_content"] == f"NAP {order['order_code']}"
+    assert order["transfer_content"] == f"TOPUP {order['order_code']}"
 
 
 def test_webhook_pays_small_package(client: TestClient, make_token) -> None:
@@ -185,7 +185,7 @@ def test_webhook_pays_order_and_adds_credits(
         order = _create_order(client, make_token)
         assert order["status"] == "pending"
         assert order["order_code"].startswith("DV")
-        assert order["transfer_content"] == f"NAP {order['order_code']}"
+        assert order["transfer_content"] == f"TOPUP {order['order_code']}"
 
         result = _pay_order_via_webhook(client, order, txn="FT25001.0001")
         assert "paid" in result["result"]
@@ -317,7 +317,7 @@ def test_ai_blocked_when_out_of_credits(
         headers=headers,
     )
     assert response.status_code == 402
-    assert "Không đủ credit" in response.json()["detail"]
+    assert "Not enough credits" in response.json()["detail"]
 
 
 def test_charge_deducts_free_before_purchased(
@@ -348,7 +348,7 @@ def test_order_qr_url_is_png_ready(client: TestClient, make_token) -> None:
         assert "bank=MB" in url
         assert f"amount={order['amount_vnd']}" in url
         # Nội dung chuyển khoản nằm trong `des` để SePay đối chiếu được
-        assert f"des=NAP+{order['order_code']}" in url
+        assert f"des=TOPUP+{order['order_code']}" in url
         # Thông tin chuyển khoản hiển thị cạnh QR
         assert order["bank_account"] == "0123456789"
         assert order["bank_bin"] == "MB"

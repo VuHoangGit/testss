@@ -1,4 +1,4 @@
-/// Bọc speech_to_text — nhận lệnh push-to-talk tiếng Việt (vi-VN).
+/// Bọc speech_to_text — nhận lệnh push-to-talk tiếng Anh (en-US).
 ///
 /// Web (Edge/Chrome) dùng Web Speech API: mic chỉ bật sau khi người dùng
 /// chủ động bấm nút (user gesture). Lỗi engine/quyền được báo qua callback
@@ -33,23 +33,28 @@ class SpeechService {
   }
 
   /// Bắt đầu nghe. [onResult] nhận transcript tạm (isFinal=false) hoặc cuối
-  /// (isFinal=true). Tự dừng khi engine báo final ở web không đảm bảo —
-  /// controller xử lý final ngay khi nhận.
+  /// (isFinal=true). Trên web engine tự kết thúc khi người dùng ngừng nói —
+  /// controller quyết định nghe tiếp hay không (không tự gửi đi).
   Future<void> listen({
     required void Function(String text, bool isFinal) onResult,
     required void Function(String message) onError,
   }) async {
     if (!_available) return;
-    await _stt.listen(
-      onResult: (SpeechRecognitionResult result) =>
-          onResult(result.recognizedWords, result.finalResult),
-      listenOptions: SpeechListenOptions(
-        localeId: 'vi-VN',
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: ListenMode.dictation,
-      ),
-    );
+    try {
+      await _stt.listen(
+        onResult: (SpeechRecognitionResult result) =>
+            onResult(result.recognizedWords, result.finalResult),
+        listenOptions: SpeechListenOptions(
+          localeId: 'en-US',
+          partialResults: true,
+          cancelOnError: true,
+          listenMode: ListenMode.dictation,
+        ),
+      );
+    } on Exception catch (error) {
+      // Engine có thể từ chối lệnh listen (đang chạy phiên khác trên web).
+      onError('$error');
+    }
   }
 
   Future<void> stop() async {

@@ -26,7 +26,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
           )
           .toList(growable: false);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được bảng giá');
+      throw mapDioException(e, fallback: 'Could not load the pricing');
     }
   }
 
@@ -37,7 +37,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
           await dio.get<dynamic>('/payments/credits');
       return CreditBalanceModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được số dư credit');
+      throw mapDioException(e, fallback: 'Could not load the credit balance');
     }
   }
 
@@ -50,7 +50,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
       );
       return PaymentOrderModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tạo được đơn thanh toán');
+      throw mapDioException(e, fallback: 'Could not create the payment order');
     }
   }
 
@@ -61,7 +61,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
           await dio.get<dynamic>('/payments/orders/$orderId');
       return PaymentOrderModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được trạng thái đơn');
+      throw mapDioException(e, fallback: 'Could not load the order status');
     }
   }
 
@@ -78,7 +78,7 @@ class PaymentsRepositoryImpl implements PaymentsRepository {
           )
           .toList(growable: false);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được lịch sử thanh toán');
+      throw mapDioException(e, fallback: 'Could not load the payment history');
     }
   }
 }

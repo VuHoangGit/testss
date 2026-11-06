@@ -16,7 +16,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
     final AsyncValue<List<PaymentOrder>> orders =
         ref.watch(paymentHistoryProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Lịch sử thanh toán')),
+      appBar: AppBar(title: const Text('Payment history')),
       body: RefreshIndicator(
         onRefresh: () async => ref.refresh(paymentHistoryProvider.future),
         child: orders.when(
@@ -32,7 +32,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Chưa có giao dịch nào.\nNạp credit trong mục "Mua credit".',
+                    'No transactions yet.\nTop up credits under "Buy credits".',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -104,7 +104,7 @@ class _OrderTile extends StatelessWidget {
           '${order.createdAt.toLocal().toString().substring(0, 16)}',
         ),
         trailing: Text(
-          paid ? 'Đã thanh toán' : 'Chờ chuyển khoản',
+          paid ? 'Paid' : 'Awaiting transfer',
           style: theme.textTheme.labelLarge?.copyWith(
             color: paid ? Colors.green.shade700 : theme.colorScheme.outline,
             fontWeight: FontWeight.w700,

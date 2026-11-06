@@ -1,8 +1,8 @@
 """Schema API ra lệnh bằng giọng nói.
 
 Client gửi transcript cùng ngữ cảnh app (danh sách thư mục/tài liệu đang có)
-để backend chuyển cho Gemini chọn action. Id chỉ dùng để client resolve lại
-tên → id; backend KHÔNG gửi id lên Gemini (chống bịa id).
+để backend chuyển cho LLM chọn action. Id chỉ dùng để client resolve lại
+tên → id; backend KHÔNG gửi id lên LLM (chống bịa id).
 """
 
 from pydantic import BaseModel, Field
@@ -33,7 +33,7 @@ class VoiceCommandRequest(BaseModel):
 
 
 class VoiceCommandResponse(BaseModel):
-    # None khi Gemini chỉ trả lời text (hỏi lại/chào hỏi) hoặc action không hợp lệ
+    # None khi LLM chỉ trả lời text (hỏi lại/chào hỏi) hoặc action không hợp lệ
     action: str | None = None
     params: dict[str, object] = Field(default_factory=dict)
     reply: str

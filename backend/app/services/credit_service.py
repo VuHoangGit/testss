@@ -53,9 +53,9 @@ def charge(db: Session, user: User, cost: int | None = None) -> int:
     ensure_monthly_refresh(db, user)
     if user.credit_free + user.credit_purchased < cost:
         raise InsufficientCredits(
-            f"Không đủ credit (cần {cost}, đang có "
-            f"{user.credit_free + user.credit_purchased}). Nạp thêm credit "
-            "trong mục Account → Buy credits.",
+            f"Not enough credits (need {cost}, you have "
+            f"{user.credit_free + user.credit_purchased}). Top up credits "
+            "under Account → Buy credits.",
             balance=user.credit_free + user.credit_purchased,
             cost=cost,
         )

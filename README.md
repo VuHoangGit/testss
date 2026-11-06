@@ -121,6 +121,9 @@ Google login cũng do **Supabase Auth** lo, không cần khai báo client ID ở
 | `ANTHROPIC_BASE_URL` | Base URL dịch vụ AI | `https://api.z.ai/api/anthropic` |
 | `ANTHROPIC_MODEL` | Model cho OCR/chat/dịch | `glm-4.6` |
 | `ANTHROPIC_TIMEOUT_SECONDS` | Timeout gọi AI | 90 |
+| `OCR_MAX_PAGES` | Số trang tối đa mỗi lượt OCR (mỗi trang 1 lượt gọi AI) | 20 |
+| `OCR_DPI` | DPI render trang PDF scan trước khi gửi AI | 200 |
+| `OCR_VISION_MODEL` | Model đọc **ảnh** cho trang scan (rỗng = dùng `ANTHROPIC_MODEL`) | rỗng |
 | `CREDIT_MONTHLY_FREE` | Credit free cấp mỗi tháng | 300 |
 | `CREDIT_COST_AI` | Credit trừ mỗi lượt gọi AI | 50 |
 | `SEPAY_WEBHOOK_SECRET` | Secret xác thực webhook SePay | rỗng |
@@ -215,3 +218,17 @@ Tab **AI** cho phép chọn PDF trong kho để OCR/trích Key-Value, xuất `.d
 theo tài liệu và dịch vùng text được bôi chọn trong viewer. Các endpoint `/api/v1/ai/*` luôn kiểm tra tài liệu
 thuộc user hiện tại; khi chưa cấu hình key, backend trả lỗi cấu hình rõ ràng thay vì
 giả lập kết quả. Mỗi lượt gọi trừ **50 credit** (`CREDIT_COST_AI`), lỗi AI thì tự hoàn.
+
+**OCR chạy theo từng trang** (xem [docs/ocr-pipeline.md](docs/ocr-pipeline.md)):
+PDF có lớp text dùng luôn văn bản trích được (không gọi AI), trang scan mới render
+ảnh 200 DPI gửi model đọc — mỗi lượt một trang nên biết sai ở trang nào và một
+trang hỏng không làm hỏng cả file. Prompt 3 tầng (luật chép tài liệu → ngữ cảnh
+trang → schema JSON cố định), `temperature = 0`, kèm **hậu kiểm bằng máy** (ngày
+tháng, số tiền, số CCCD/MST) trả về danh sách `warnings` để người dùng đối soát.
+Cài thêm 2 package render PDF: `pip install -r backend/requirements.txt`
+(`pypdfium2`, `Pillow`).
+
+**Trang scan cần model đọc được ảnh**: `OCR_VISION_MODEL=deepseek-v4-pro` đã được
+kiểm chứng trên gateway hiện tại (khớp ~99% so với chữ gốc); model văn bản
+`ANTHROPIC_MODEL` không nhận ảnh nên hai việc dùng hai model khác nhau. Chi tiết:
+[docs/ocr-pipeline.md](docs/ocr-pipeline.md#6-model-vision--deepseek-v4-pro-đã-kiểm-chứng).

@@ -17,7 +17,7 @@ class AuthException implements Exception {
 
 /// Lỗi hạ tầng: mất mạng / timeout / 5xx — KHÔNG được dẫn tới logout (EC-16).
 class NetworkException implements Exception {
-  const NetworkException([this.message = 'Không thể kết nối máy chủ']);
+  const NetworkException([this.message = 'Could not connect to the server']);
 
   final String message;
 

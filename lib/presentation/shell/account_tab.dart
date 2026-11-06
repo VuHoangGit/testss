@@ -189,12 +189,12 @@ class _CreditsCard extends ConsumerWidget {
                             fontSize: 16,
                           ),
                         ),
-                        loading: () => const Text('Đang tải số dư…'),
+                        loading: () => const Text('Loading balance…'),
                         error: (Object e, StackTrace _) =>
-                            const Text('Không tải được số dư'),
+                            const Text('Could not load the balance'),
                       ),
                       Text(
-                        'Mỗi lượt OCR / dịch / chat: 50 credit · Free 300/tháng',
+                        'Each OCR / translate / chat call: 50 credits · 300 free per month',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -214,7 +214,7 @@ class _CreditsCard extends ConsumerWidget {
             ),
             title: const Text('Mua credit'),
             subtitle: Text(
-              'Nạp qua QR chuyển khoản — credit vào tự động',
+              'Top up via bank transfer QR — credits arrive automatically',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             trailing: const Icon(Icons.chevron_right),
@@ -236,7 +236,7 @@ class _CreditsCard extends ConsumerWidget {
               Icons.receipt_long_outlined,
               color: Theme.of(context).colorScheme.primary,
             ),
-            title: const Text('Lịch sử thanh toán'),
+            title: const Text('Payment history'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute<void>(

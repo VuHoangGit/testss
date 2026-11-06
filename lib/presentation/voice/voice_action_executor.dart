@@ -1,4 +1,4 @@
-/// Thực thi action do backend (Gemini) chọn.
+/// Thực thi action do backend (LLM) chọn.
 ///
 /// Nguyên tắc: chỉ thực thi action nằm trong danh sách đã biết; resolve
 /// TÊN → tài liệu/thư mục bằng name_matcher trên danh sách client đang có
@@ -27,10 +27,10 @@ const Map<String, int> _aiToolIndexes = <String, int>{
 
 /// Nhãn hiển thị của các tab (đọc lên bằng TTS cho tự nhiên).
 const Map<String, String> _tabLabels = <String, String>{
-  'dashboard': 'Tổng quan',
-  'documents': 'Tài liệu',
+  'dashboard': 'Overview',
+  'documents': 'Documents',
   'ai': 'AI',
-  'account': 'Tài khoản',
+  'account': 'Account',
 };
 
 /// Thực thi và trả về câu phản hồi cuối (hiển thị + đọc bằng TTS).
@@ -55,14 +55,14 @@ Future<String> executeVoiceAction(Ref ref, VoiceCommandResult decision) async {
       ),
       'translate_text' => _translateText(ref, decision.params),
       'read_aloud' => _readAloud(ref, _param(decision, 'what')),
-      'stop_speaking' => 'Đã dừng đọc.',
+      'stop_speaking' => 'Stopped reading.',
       'delete_document' => _deleteDocument(ref, _param(decision, 'name_query')),
       'merge_documents' => _mergeDocuments(ref, decision.params),
       'split_document' => _splitDocument(ref, decision.params),
-      _ => 'Tính năng "$action" chưa được hỗ trợ bằng giọng nói.',
+      _ => 'The "$action" feature is not supported by voice yet.',
     };
   } on Exception catch (error) {
-    return 'Thao tác thất bại: $error';
+    return 'Action failed: $error';
   }
 }
 
@@ -83,22 +83,22 @@ void _popViewerIfOpen() {
 Future<String> _navigateTab(Ref ref, String tabId) async {
   final int? index = ref.read(shellTabProvider.notifier).indexById(tabId);
   if (index == null) {
-    return 'Không nhận ra tab "$tabId".';
+    return 'Could not recognize the tab "$tabId".';
   }
   _popViewerIfOpen();
   ref.read(shellTabProvider.notifier).setTab(index);
-  return 'Đã chuyển đến tab ${_tabLabels[tabId] ?? tabId}.';
+  return 'Switched to the ${_tabLabels[tabId] ?? tabId} tab.';
 }
 
 Future<String> _openAiTool(Ref ref, String toolId) async {
   final int? toolIndex = _aiToolIndexes[toolId];
   if (toolIndex == null) {
-    return 'Không nhận ra công cụ "$toolId".';
+    return 'Could not recognize the tool "$toolId".';
   }
   _popViewerIfOpen();
   ref.read(shellTabProvider.notifier).setTab(2); // tab AI
   ref.read(aiToolProvider.notifier).setTool(toolIndex);
-  return 'Đã mở công cụ AI bạn yêu cầu.';
+  return 'Opened the requested AI tool.';
 }
 
 Future<String> _selectFolder(Ref ref, String folderName) async {
@@ -110,19 +110,19 @@ Future<String> _selectFolder(Ref ref, String folderName) async {
   );
   if (match.status == NameMatchStatus.ambiguous) {
     return _askAgain(
-      'Thư mục "$folderName"',
+      'Folder "$folderName"',
       match.candidates.map((DocumentFolder folder) => folder.name).toList(),
     );
   }
   if (match.item == null) {
-    return 'Không tìm thấy thư mục "$folderName".';
+    return 'No folder named "$folderName" was found.';
   }
   _popViewerIfOpen();
   ref.read(shellTabProvider.notifier).setTab(1); // tab Tài liệu
   await ref
       .read(documentsControllerProvider.notifier)
       .selectFolder(match.item!.id);
-  return 'Đã lọc theo thư mục "${match.item!.name}".';
+  return 'Filtered by the "${match.item!.name}" folder.';
 }
 
 Future<String> _listDocuments(Ref ref) async {
@@ -130,16 +130,16 @@ Future<String> _listDocuments(Ref ref) async {
   _popViewerIfOpen();
   ref.read(shellTabProvider.notifier).setTab(1);
   if (data.documents.isEmpty) {
-    return 'Hiện chưa có tài liệu nào.';
+    return 'There are no documents yet.';
   }
   final List<String> names = data.documents
       .take(10)
       .map((DocumentItem doc) => doc.name)
       .toList();
   final String suffix = data.documents.length > 10
-      ? ' và ${data.documents.length - 10} file khác'
+      ? ' and ${data.documents.length - 10} more files'
       : '';
-  return 'Bạn đang có ${data.documents.length} tài liệu: ${names.join(', ')}$suffix.';
+  return 'You have ${data.documents.length} documents: ${names.join(', ')}$suffix.';
 }
 
 Future<DocumentItem?> _resolveDocument(
@@ -159,15 +159,15 @@ Future<DocumentItem?> _resolveDocument(
     case NameMatchStatus.ambiguous:
       onAmbiguous(
         _askAgain(
-          'Tài liệu "$nameQuery"',
+          'Document "$nameQuery"',
           match.candidates.map((DocumentItem doc) => doc.name).toList(),
         ),
       );
     case NameMatchStatus.none:
       final String hint = match.candidates.isEmpty
-          ? 'Danh sách tài liệu hiện trống hoặc không có file gần giống.'
-          : 'Các file gần giống: ${match.candidates.take(5).map((DocumentItem d) => d.name).join(', ')}.';
-      onAmbiguous('Không tìm thấy tài liệu "$nameQuery". $hint');
+          ? 'The document list is empty or has no similarly named file.'
+          : 'Similar files: ${match.candidates.take(5).map((DocumentItem d) => d.name).join(', ')}.';
+      onAmbiguous('No document named "$nameQuery" was found. $hint');
   }
   return Future<DocumentItem?>.value(null);
 }
@@ -180,7 +180,7 @@ String _askAgain(String title, List<String> candidates) {
       .entries
       .map((MapEntry<int, String> entry) => '${entry.key + 1}. ${entry.value}')
       .join('; ');
-  return '$title khớp nhiều lựa chọn: $list. Hãy nói lại kèm tên đủ chính xác.';
+  return '$title matches several choices: $list. Please say the full name again.';
 }
 
 Future<String> _openDocument(Ref ref, String nameQuery) async {
@@ -207,16 +207,14 @@ Future<String> _runOcr(Ref ref, String nameQuery) async {
   );
   if (doc == null) return feedback;
   if (!doc.isPdf) {
-    return 'OCR hiện chỉ hỗ trợ file PDF.';
+    return 'OCR currently supports PDF files only.';
   }
   ref.read(shellTabProvider.notifier).setTab(2);
   ref.read(aiToolProvider.notifier).setTool(0); // OCR
   ref.read(aiDocumentIdProvider.notifier).select(doc.id);
   final OcrResult result = await ref.read(aiRepositoryProvider).ocr(doc.id);
-  ref
-      .read(lastAiResultsProvider.notifier)
-      .setOcr(result.text, result.keyValues);
-  return 'Đã quét OCR "${doc.name}". Bạn có thể nói "đọc kết quả" để nghe nội dung.';
+  ref.read(lastAiResultsProvider.notifier).setOcrResult(result);
+  return 'Ran OCR on "${doc.name}". Say "read the result" to hear the content.';
 }
 
 Future<String> _askChat(Ref ref, String question, String? nameQuery) async {
@@ -230,13 +228,13 @@ Future<String> _askChat(Ref ref, String question, String? nameQuery) async {
     );
     if (doc == null) return feedback;
     if (!doc.isPdf) {
-      return 'Chat với AI hiện chỉ hỗ trợ file PDF.';
+      return 'AI chat currently supports PDF files only.';
     }
     documentId = doc.id;
     ref.read(aiDocumentIdProvider.notifier).select(doc.id);
   }
   if (documentId == null) {
-    return 'Chưa chọn tài liệu. Hãy nói lại kèm tên file, ví dụ: "hỏi về file hợp đồng".';
+    return 'No document selected. Say the command again with the file name, for example "ask about the contract file".';
   }
   ref.read(shellTabProvider.notifier).setTab(2);
   ref.read(aiToolProvider.notifier).setTool(1); // Chat
@@ -260,7 +258,7 @@ Future<String> _askChat(Ref ref, String question, String? nameQuery) async {
 Future<String> _translateText(Ref ref, Map<String, dynamic> params) async {
   final String text = params['text']?.toString() ?? '';
   if (text.isEmpty) {
-    return 'Chưa có nội dung để dịch.';
+    return 'There is no text to translate.';
   }
   final String targetLanguage =
       params['target_language']?.toString() ?? 'English';
@@ -276,14 +274,14 @@ Future<String> _translateText(Ref ref, Map<String, dynamic> params) async {
 Future<String> _readAloud(Ref ref, String what) async {
   final LastAiResults last = ref.read(lastAiResultsProvider);
   return switch (what) {
-    'ocr_result' => last.ocrText ?? 'Chưa có kết quả OCR nào.',
-    'chat_answer' => last.chatAnswer ?? 'Chưa có câu trả lời AI nào.',
-    'translation' => last.translation ?? 'Chưa có bản dịch nào.',
+    'ocr_result' => last.ocrText ?? 'There is no OCR result yet.',
+    'chat_answer' => last.chatAnswer ?? 'There is no AI answer yet.',
+    'translation' => last.translation ?? 'There is no translation yet.',
     _ =>
       last.chatAnswer ??
           last.translation ??
           last.ocrText ??
-          'Chưa có nội dung nào để đọc.',
+          'There is nothing to read yet.',
   };
 }
 
@@ -297,36 +295,36 @@ Future<String> _deleteDocument(Ref ref, String nameQuery) async {
   if (doc == null) return feedback;
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {
-    return 'Không mở được hộp thoại xác nhận.';
+    return 'Could not open the confirmation dialog.';
   }
   final bool? ok = await showDialog<bool>(
     context: context,
     builder: (BuildContext ctx) => AlertDialog(
-      title: const Text('Xóa tài liệu?'),
+      title: const Text('Delete document?'),
       content: Text(
-        'Lệnh giọng nói yêu cầu xóa "${doc.name}". File sẽ bị xóa vĩnh viễn, '
-        'thao tác không thể hoàn tác.',
+        'A voice command asked to delete "${doc.name}". The file will be deleted permanently, '
+        'and this cannot be undone.',
       ),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Hủy'),
+          child: const Text('Cancel'),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: Theme.of(ctx).colorScheme.error,
           ),
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Xóa'),
+          child: const Text('Delete'),
         ),
       ],
     ),
   );
   if (ok != true) {
-    return 'Đã hủy lệnh xóa.';
+    return 'Delete cancelled.';
   }
   await ref.read(documentsControllerProvider.notifier).deleteDocument(doc.id);
-  return 'Đã xóa "${doc.name}".';
+  return 'Deleted "${doc.name}".';
 }
 
 Future<String> _mergeDocuments(Ref ref, Map<String, dynamic> params) async {
@@ -357,21 +355,21 @@ Future<String> _mergeDocuments(Ref ref, Map<String, dynamic> params) async {
       .where((String id) => all.any((DocumentItem d) => d.id == id && d.isPdf))
       .toList();
   if (documentIds.length < 2) {
-    return 'Cần ít nhất 2 file PDF để gộp. Hãy nói lại kèm tên các file, '
-        'ví dụ: "gộp file a và b".';
+    return 'Merging needs at least 2 PDF files. Say it again with the file names, '
+        'for example "merge file a and file b".';
   }
   final String? name = await _promptText(
-    'Gộp ${documentIds.length} tài liệu',
-    hint: 'Tên file gộp',
+    'Merge ${documentIds.length} documents',
+    hint: 'Merged file name',
     initial: params['new_name']?.toString(),
   );
   if (name == null || name.isEmpty) {
-    return 'Đã hủy lệnh gộp.';
+    return 'Merge cancelled.';
   }
   notifier.setSelection(documentIds);
   ref.read(shellTabProvider.notifier).setTab(1);
   final String newName = await notifier.mergeSelected(name);
-  return 'Đã tạo file gộp "$newName".';
+  return 'Created the merged file "$newName".';
 }
 
 Future<String> _splitDocument(Ref ref, Map<String, dynamic> params) async {
@@ -383,21 +381,21 @@ Future<String> _splitDocument(Ref ref, Map<String, dynamic> params) async {
   );
   if (doc == null) return feedback;
   if (!doc.isPdf) {
-    return 'Chỉ hỗ trợ tách file PDF.';
+    return 'Only PDF files can be split.';
   }
   final String? ranges = await _promptText(
-    'Tách trang "${doc.name}"',
-    hint: 'VD: 1-3,5',
+    'Split pages of "${doc.name}"',
+    hint: 'e.g. 1-3,5',
     initial: params['ranges']?.toString(),
   );
   if (ranges == null || ranges.isEmpty) {
-    return 'Đã hủy lệnh tách.';
+    return 'Split cancelled.';
   }
   final List<String> parts = await ref
       .read(documentsControllerProvider.notifier)
       .splitDocument(doc.id, ranges: ranges);
   ref.read(shellTabProvider.notifier).setTab(1);
-  return 'Đã tạo ${parts.length} file: ${parts.join(', ')}.';
+  return 'Created ${parts.length} files: ${parts.join(', ')}.';
 }
 
 Future<String?> _promptText(
@@ -423,11 +421,11 @@ Future<String?> _promptText(
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(),
-          child: const Text('Hủy'),
+          child: const Text('Cancel'),
         ),
         FilledButton(
           onPressed: () => Navigator.of(ctx).pop(controller.text),
-          child: const Text('Xong'),
+          child: const Text('Done'),
         ),
       ],
     ),

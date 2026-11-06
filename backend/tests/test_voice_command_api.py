@@ -21,7 +21,7 @@ def _login(client, make_token):
     return token
 
 
-def _body(transcript="vào tab tài liệu", session_id="sess-00000001"):
+def _body(transcript="go to the documents tab", session_id="sess-00000001"):
     return {
         "transcript": transcript,
         "session_id": session_id,
@@ -50,7 +50,7 @@ def test_voice_command_returns_decision(client, monkeypatch, make_token):
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: VoiceCommandResponse(
-            action="navigate_tab", params={"tab": "documents"}, reply="Đã chuyển tab."
+            action="navigate_tab", params={"tab": "documents"}, reply="Switched tab."
         ),
     )
     response = client.post(
@@ -62,7 +62,7 @@ def test_voice_command_returns_decision(client, monkeypatch, make_token):
     assert response.json() == {
         "action": "navigate_tab",
         "params": {"tab": "documents"},
-        "reply": "Đã chuyển tab.",
+        "reply": "Switched tab.",
     }
 
 
@@ -71,7 +71,7 @@ def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_token):
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: (_ for _ in ()).throw(
-            VoiceCommandError("AI chưa được cấu hình ANTHROPIC_AUTH_TOKEN trên backend")
+            VoiceCommandError("AI is not configured: ANTHROPIC_AUTH_TOKEN is missing on the backend")
         ),
     )
     response = client.post(
@@ -114,7 +114,7 @@ def test_interpret_returns_action_from_tool_use(monkeypatch):
 
     monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     decision = voice_command_service.interpret(
-        transcript="vào tab tài liệu",
+        transcript="go to the documents tab",
         context=VoiceAppContext(current_tab="ai"),
         session_id="s1",
     )
@@ -127,16 +127,16 @@ def test_interpret_text_reply_gives_no_action(monkeypatch):
     monkeypatch.setattr(
         voice_command_service.ai_service,
         "post_anthropic",
-        lambda payload: _text_reply("Bạn muốn mở file nào?"),
+        lambda payload: _text_reply("Which file do you want to open?"),
     )
     decision = voice_command_service.interpret(
-        transcript="mở file",
+        transcript="open file",
         context=VoiceAppContext(),
         session_id="s2",
     )
     assert decision.action is None
     assert decision.params == {}
-    assert decision.reply == "Bạn muốn mở file nào?"
+    assert decision.reply == "Which file do you want to open?"
 
 
 def test_interpret_rejects_unknown_tool(monkeypatch):
@@ -146,12 +146,12 @@ def test_interpret_rejects_unknown_tool(monkeypatch):
         lambda payload: _tool_use("open_youtube", {"url": "x"}),
     )
     decision = voice_command_service.interpret(
-        transcript="mở youtube",
+        transcript="open youtube",
         context=VoiceAppContext(),
         session_id="s3",
     )
     assert decision.action is None
-    assert "hỗ trợ" in decision.reply
+    assert "not supported" in decision.reply
 
 
 def test_interpret_rejects_invalid_enum_value(monkeypatch):
@@ -161,7 +161,7 @@ def test_interpret_rejects_invalid_enum_value(monkeypatch):
         lambda payload: _tool_use("navigate_tab", {"tab": "youtube"}),
     )
     decision = voice_command_service.interpret(
-        transcript="mở youtube",
+        transcript="open youtube",
         context=VoiceAppContext(),
         session_id="s4",
     )
@@ -175,7 +175,7 @@ def test_interpret_rejects_missing_required_param(monkeypatch):
         lambda payload: _tool_use("run_ocr", {}),
     )
     decision = voice_command_service.interpret(
-        transcript="quét ocr",
+        transcript="run ocr",
         context=VoiceAppContext(),
         session_id="s5",
     )
@@ -185,7 +185,7 @@ def test_interpret_rejects_missing_required_param(monkeypatch):
 
 def test_interpret_maps_ai_service_error(monkeypatch):
     def boom(payload):
-        raise ai_service.AIServiceError("Không kết nối được dịch vụ AI")
+        raise ai_service.AIServiceError("Could not connect to the AI service")
 
     monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", boom)
     with pytest.raises(VoiceCommandError):
@@ -213,7 +213,7 @@ def test_interpret_prompt_contains_names_but_not_ids(monkeypatch):
             )
         ],
     )
-    voice_command_service.interpret(transcript="mở file hợp đồng", context=context, session_id="s7")
+    voice_command_service.interpret(transcript="open the contract file", context=context, session_id="s7")
     prompt = captured["payload"]["messages"][-1]["content"]
     assert "hop-dong-2024.pdf" in prompt
     assert "d1" not in prompt
@@ -233,13 +233,13 @@ def test_history_is_sent_and_capped(monkeypatch):
     monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     for i in range(12):
         voice_command_service.interpret(
-            transcript=f"lệnh số {i}",
+            transcript=f"command number {i}",
             context=VoiceAppContext(),
             session_id="hist",
         )
     messages = captured["payload"]["messages"]
     user_turns = [c for c in messages if c["role"] == "user"]
-    assert any("lệnh số 11" in c["content"] for c in user_turns)
+    assert any("command number 11" in c["content"] for c in user_turns)
     assert all("lệnh số 0\n" not in c["content"] + "\n" for c in user_turns)
     # +1 vì lượt hiện tại nằm ngoài history đã trim
     assert len(user_turns) <= voice_command_service.MAX_HISTORY_TURNS + 1
@@ -254,10 +254,10 @@ def test_history_is_isolated_between_sessions(monkeypatch):
 
     monkeypatch.setattr(voice_command_service.ai_service, "post_anthropic", fake_post)
     voice_command_service.interpret(
-        transcript="của session A", context=VoiceAppContext(), session_id="a"
+        transcript="from session A", context=VoiceAppContext(), session_id="a"
     )
     voice_command_service.interpret(
-        transcript="của session B", context=VoiceAppContext(), session_id="b"
+        transcript="from session B", context=VoiceAppContext(), session_id="b"
     )
     texts = [c["content"] for c in captured["payload"]["messages"]]
     assert not any("session A" in t for t in texts)

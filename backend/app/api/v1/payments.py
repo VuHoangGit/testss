@@ -41,7 +41,7 @@ def _parse_authorization(header: str | None) -> tuple[str, str | None]:
     scheme = scheme.strip().lower()
     value = value.strip()
     if scheme not in _AUTH_SCHEMES or not value:
-        return f"Authorization scheme lạ ({scheme or 'rỗng'})", None
+        return f"Unknown Authorization scheme ({scheme or 'empty'})", None
     return f"Authorization: {scheme}", value
 
 
@@ -91,10 +91,10 @@ def get_order(order_id: str, db: DbSession, current: CurrentUser) -> OrderOut:
     try:
         order_uuid = uuid.UUID(order_id)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail="Không tìm thấy đơn") from exc
+        raise HTTPException(status_code=404, detail="Order not found") from exc
     order = payment_service.get_order(db, order_uuid, current)
     if order is None:
-        raise HTTPException(status_code=404, detail="Không tìm thấy đơn")
+        raise HTTPException(status_code=404, detail="Order not found")
     return OrderOut.from_order(order)
 
 
@@ -120,7 +120,7 @@ def receive_sepay_webhook(
     if not configured_secret:
         raise HTTPException(
             status_code=503,
-            detail="SEPAY_WEBHOOK_SECRET chưa được cấu hình trên backend",
+            detail="SEPAY_WEBHOOK_SECRET is not configured on the backend",
         )
 
     scheme, received_secret = _parse_authorization(authorization)
@@ -128,18 +128,18 @@ def receive_sepay_webhook(
     if not received_secret or not secrets.compare_digest(received_secret, configured_secret):
         # Log dạng băm: đủ để biết "khớp hay không" mà không ghi secret vào file log
         logger.warning(
-            "SePay webhook xác thực thất bại: header=%s | nhận được len=%d sha=%s | "
-            "cấu hình len=%d sha=%s",
+            "SePay webhook auth failed: header=%s | received len=%d sha=%s | "
+            "configured len=%d sha=%s",
             "X-Webhook-Secret" if x_webhook_secret else scheme,
             len(received_secret or ""),
             _fingerprint(received_secret or ""),
             len(configured_secret),
             _fingerprint(configured_secret),
         )
-        raise HTTPException(status_code=401, detail="Webhook secret không hợp lệ")
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
     if not payload:
-        raise HTTPException(status_code=400, detail="Webhook payload không được rỗng")
+        raise HTTPException(status_code=400, detail="Webhook payload must not be empty")
 
     result = payment_service.process_sepay_webhook(db, payload)
     logger.info("SePay webhook: %s", result)

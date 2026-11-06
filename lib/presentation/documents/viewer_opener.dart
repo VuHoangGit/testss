@@ -24,7 +24,7 @@ Future<String> openPdfViewer({
   final Uint8List bytes = await repository.downloadDocument(doc.id);
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {
-    return 'Không mở được trình xem tài liệu';
+    return 'Could not open the document viewer';
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
@@ -36,7 +36,7 @@ Future<String> openPdfViewer({
       ),
     ),
   );
-  return 'Đã mở "${doc.name}"';
+  return 'Opened "${doc.name}"';
 }
 
 /// Trích văn bản rồi đẩy [TextViewerScreen] (PDF viewer đã lo file PDF).
@@ -47,7 +47,7 @@ Future<String> _openTextViewer({
   final String text = await aiRepository.extractText(doc.id);
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {
-    return 'Không mở được trình xem tài liệu';
+    return 'Could not open the document viewer';
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
@@ -59,7 +59,7 @@ Future<String> _openTextViewer({
       ),
     ),
   );
-  return 'Đã mở "${doc.name}"';
+  return 'Opened "${doc.name}"';
 }
 
 /// Tải bytes rồi đẩy [ImageViewerScreen].
@@ -70,14 +70,14 @@ Future<String> _openImageViewer({
   final Uint8List bytes = await repository.downloadDocument(doc.id);
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {
-    return 'Không mở được trình xem tài liệu';
+    return 'Could not open the document viewer';
   }
   await Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
       builder: (_) => ImageViewerScreen(fileName: doc.name, bytes: bytes),
     ),
   );
-  return 'Đã mở "${doc.name}"';
+  return 'Opened "${doc.name}"';
 }
 
 /// Metadata một dòng cho toolbar của viewer (kích thước + số trang nếu có).
@@ -109,5 +109,5 @@ Future<String> openDocumentViewer({
   if (doc.isImage) {
     return _openImageViewer(repository: repository, doc: doc);
   }
-  return '"${doc.name}" chưa hỗ trợ xem trước — hãy tải về để mở bằng ứng dụng phù hợp.';
+  return '"${doc.name}" cannot be previewed — download it and open it with a suitable app.';
 }

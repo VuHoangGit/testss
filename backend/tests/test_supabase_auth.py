@@ -140,7 +140,7 @@ class TestAuthMeEndpoint:
         token = make_token(sub="sub-unverified", email="u@gmail.com", email_verified=False)
         resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 401
-        assert "xác thực email" in resp.json()["detail"]
+        assert "not verified" in resp.json()["detail"]
 
     def test_accepts_token_without_email_verified_claim(self, client, make_token):
         """JWT Signing Keys mới của Supabase bỏ claim `email_verified` khỏi

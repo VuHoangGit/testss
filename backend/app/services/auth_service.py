@@ -48,7 +48,7 @@ def resolve_supabase_user(
         return user
 
     if not email:
-        raise AuthError("Chưa xác thực email — hãy xác nhận email trong Supabase rồi đăng nhập lại")
+        raise AuthError("Email not verified — confirm your email in Supabase, then sign in again")
 
     normalized = email.strip().lower()
     candidates = list(db.scalars(select(User).where(User.email == normalized)))

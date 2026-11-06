@@ -42,12 +42,12 @@ def delete_folder(
     user = current
     folder = db.get(Folder, folder_id)
     if folder is None or folder.owner_id != user.id:
-        raise HTTPException(status_code=404, detail="Không tìm thấy thư mục")
+        raise HTTPException(status_code=404, detail="Folder not found")
     count = db.scalar(
         select(func.count()).select_from(Document).where(Document.folder_id == folder.id)
     )
     if (count or 0) > 0:
-        raise HTTPException(status_code=409, detail="Thư mục còn tài liệu, không xóa được")
+        raise HTTPException(status_code=409, detail="Folder still contains documents and cannot be deleted")
     db.delete(folder)
     db.commit()
-    return {"detail": "Đã xóa thư mục"}
+    return {"detail": "Folder deleted"}

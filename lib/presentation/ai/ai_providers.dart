@@ -48,6 +48,8 @@ class LastAiResults {
   const LastAiResults({
     this.ocrText,
     this.ocrKeyValues = const <String, String>{},
+    this.ocrPages = const <OcrPage>[],
+    this.ocrWarnings = const <String>[],
     this.chatQuestion,
     this.chatAnswer,
     this.sourceText,
@@ -56,6 +58,10 @@ class LastAiResults {
 
   final String? ocrText;
   final Map<String, String> ocrKeyValues;
+
+  /// Nội dung từng trang + cảnh báo hậu kiểm của lượt OCR gần nhất.
+  final List<OcrPage> ocrPages;
+  final List<String> ocrWarnings;
   final String? chatQuestion;
   final String? chatAnswer;
   final String? sourceText;
@@ -71,6 +77,14 @@ lastAiResultsProvider =
 class LastAiResultsController extends Notifier<LastAiResults> {
   @override
   LastAiResults build() => const LastAiResults();
+
+  /// Lưu kết quả OCR (kèm nội dung từng trang và cảnh báo đối soát).
+  void setOcrResult(OcrResult result) => state = LastAiResults(
+    ocrText: result.text,
+    ocrKeyValues: result.keyValues,
+    ocrPages: result.pages,
+    ocrWarnings: result.warnings,
+  );
 
   void setOcr(String text, Map<String, String> keyValues) =>
       state = LastAiResults(ocrText: text, ocrKeyValues: keyValues);

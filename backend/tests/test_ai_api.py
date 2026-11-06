@@ -1,7 +1,10 @@
+import io
 import uuid
 
+from app.core.config import get_settings
 from app.models.document import Document
 from app.models.user import User
+from app.services import ai_service, ocr_service
 
 
 def _login(client, make_token):
@@ -86,7 +89,7 @@ def test_chat_rejects_pdf_without_extractable_text(
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Chọn ít nhất một PDF có nội dung văn bản"
+    assert response.json()["detail"] == "Select at least one PDF that contains text"
 
 
 def test_chat_rejects_document_owned_by_another_user(
@@ -115,7 +118,7 @@ def test_chat_rejects_document_owned_by_another_user(
     )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == "Không tìm thấy tài liệu"
+    assert response.json()["detail"] == "Document not found"
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +205,7 @@ def test_extract_text_unsupported_mime_returns_415(
     )
 
     assert response.status_code == 415
-    assert "Chưa hỗ trợ" in response.json()["detail"]
+    assert "cannot be read" in response.json()["detail"]
 
 
 def test_extract_text_empty_pdf_returns_422(
@@ -280,3 +283,177 @@ def test_translate_defaults_source_to_auto(client, monkeypatch, make_token):
 
     assert response.status_code == 200
     assert captured["source"] is None
+
+
+# ---------------------------------------------------------------------------
+# POST /ai/ocr/{id} — pipeline OCR theo trang + cảnh báo hậu kiểm
+
+
+def test_ocr_returns_pages_structured_data_and_warnings(
+    client, monkeypatch, make_token, db_session_factory
+):
+    token = _login(client, make_token)
+    document_id = _make_document(
+        db_session_factory, name="hop-dong.pdf", mime_type="application/pdf"
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.storage_service.read_document_bytes",
+        lambda storage_key: b"pdf bytes",
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.ocr_service.ocr_document_bytes",
+        lambda data, mime_type, name, options: ocr_service.OcrOutcome(
+            pages=[
+                ocr_service.OcrPage(page=1, text="Trang một", source="text-layer"),
+                ocr_service.OcrPage(page=2, text="Trang hai", source="vision"),
+            ],
+            structured={
+                **ocr_service.empty_structured(),
+                "so_hieu": "01/HĐ",
+                "tong_tien": {"so": "1250000", "don_vi": "VND"},
+            },
+            warnings=["1 spot(s) marked as unreadable ([?]/[lost text])"],
+        ),
+    )
+
+    response = client.post(
+        f"/api/v1/ai/ocr/{document_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [page["page"] for page in body["pages"]] == [1, 2]
+    assert [page["source"] for page in body["pages"]] == ["text-layer", "vision"]
+    assert "--- Trang 1 ---" in body["text"]
+    assert body["data"]["so_hieu"] == "01/HĐ"
+    assert body["key_values"]["tong_tien"] == "1250000 VND"
+    assert body["warnings"]
+
+
+def test_ocr_forwards_document_hints_from_body(
+    client, monkeypatch, make_token, db_session_factory
+):
+    token = _login(client, make_token)
+    document_id = _make_document(
+        db_session_factory, name="hoa-don.pdf", mime_type="application/pdf"
+    )
+    captured = {}
+
+    def fake_ocr(data, mime_type, name, options):
+        captured["options"] = options
+        return ocr_service.OcrOutcome(
+            pages=[ocr_service.OcrPage(page=1, text="Nội dung", source="text-layer")]
+        )
+
+    monkeypatch.setattr(
+        "app.api.v1.ai.storage_service.read_document_bytes", lambda storage_key: b"pdf"
+    )
+    monkeypatch.setattr("app.api.v1.ai.ocr_service.ocr_document_bytes", fake_ocr)
+
+    response = client.post(
+        f"/api/v1/ai/ocr/{document_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "doc_type": "hoá đơn",
+            "language": "tiếng Việt",
+            "glossary": "Công ty ABC",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert captured["options"].doc_type == "hoá đơn"
+    assert captured["options"].language == "tiếng Việt"
+    assert captured["options"].glossary == "Công ty ABC"
+
+
+def test_ocr_failure_refunds_credit(
+    client, monkeypatch, make_token, db_session_factory
+):
+    token = _login(client, make_token)
+    document_id = _make_document(
+        db_session_factory, name="hong.pdf", mime_type="application/pdf"
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.storage_service.read_document_bytes", lambda storage_key: b"pdf"
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.ocr_service.ocr_document_bytes",
+        lambda data, mime_type, name, options: (_ for _ in ()).throw(
+            ai_service.AIServiceError("No page of the document could be read.")
+        ),
+    )
+
+    response = client.post(
+        f"/api/v1/ai/ocr/{document_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 503
+    assert "No page of the document could be read" in response.json()["detail"]
+    # Hoàn đủ credit của lượt hỏng
+    credits = client.get(
+        "/api/v1/payments/credits", headers={"Authorization": f"Bearer {token}"}
+    )
+    assert credits.json()["total"] == get_settings().credit_monthly_free
+
+
+# ---------------------------------------------------------------------------
+# POST /ai/ocr/{id}/word — file .docx phải giữ cấu trúc, không phải chữ thô
+
+
+def test_ocr_word_export_keeps_heading_structure(
+    client, monkeypatch, make_token, db_session_factory
+):
+    """Bản Word tải về có Heading thật (mục lục dựng được) + bảng thật."""
+    from docx import Document as OpenDocument
+
+    token = _login(client, make_token)
+    document_id = _make_document(
+        db_session_factory, name="hop-dong.pdf", mime_type="application/pdf"
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.storage_service.read_document_bytes",
+        lambda storage_key: b"pdf bytes",
+    )
+    monkeypatch.setattr(
+        "app.api.v1.ai.ocr_service.ocr_document_bytes",
+        lambda data, mime_type, name, options: ocr_service.OcrOutcome(
+            pages=[
+                ocr_service.OcrPage(
+                    page=1,
+                    text=(
+                        "# ĐIỀU KHOẢN CHUNG\n"
+                        "## Điều 1. Phạm vi\n"
+                        "- Bên A thanh toán **1.250.000 VND**\n"
+                        "| Khoản | Số tiền |\n|---|---|\n| Phí | 1.250.000 |\n"
+                    ),
+                    source="vision",
+                )
+            ]
+        ),
+    )
+
+    response = client.post(
+        f"/api/v1/ai/ocr/{document_id}/word",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    exported = OpenDocument(io.BytesIO(response.content))
+    styles = [paragraph.style.name for paragraph in exported.paragraphs]
+    assert "Heading 1" in styles
+    assert "Heading 2" in styles
+    # tài liệu có ≥ 2 tiêu đề → chèn mục lục (field TOC) ở đầu file
+    assert "Mục lục" in [paragraph.text for paragraph in exported.paragraphs]
+    assert 'TOC \\o "1-3"' in exported.element.xml
+    assert len(exported.tables) == 1
+    assert exported.tables[0].cell(1, 1).text == "1.250.000"
+    # dấu Markdown không lọt ra file
+    body = "\n".join(paragraph.text for paragraph in exported.paragraphs)
+    assert "##" not in body
+    assert "**" not in body

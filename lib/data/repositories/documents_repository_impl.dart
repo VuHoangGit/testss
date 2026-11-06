@@ -31,7 +31,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
           )
           .toList(growable: false);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được thư mục');
+      throw mapDioException(e, fallback: 'Could not load folders');
     }
   }
 
@@ -44,7 +44,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return DocumentFolderModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tạo được thư mục');
+      throw mapDioException(e, fallback: 'Could not create the folder');
     }
   }
 
@@ -53,7 +53,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     try {
       await dio.delete<dynamic>('/folders/$folderId');
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không xóa được thư mục');
+      throw mapDioException(e, fallback: 'Could not delete the folder');
     }
   }
 
@@ -84,7 +84,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
           )
           .toList(growable: false);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải được tài liệu');
+      throw mapDioException(e, fallback: 'Could not load documents');
     }
   }
 
@@ -100,7 +100,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không cập nhật được đánh dấu sao');
+      throw mapDioException(e, fallback: 'Could not update the favorite');
     }
   }
 
@@ -112,7 +112,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không đánh dấu được tài liệu đã mở');
+      throw mapDioException(e, fallback: 'Could not mark the document as opened');
     }
   }
 
@@ -139,7 +139,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải lên được file');
+      throw mapDioException(e, fallback: 'Could not upload the file');
     }
   }
 
@@ -152,7 +152,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return Uint8List.fromList(res.data ?? <int>[]);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tải xuống được tài liệu');
+      throw mapDioException(e, fallback: 'Could not download the document');
     }
   }
 
@@ -161,7 +161,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     try {
       await dio.delete<dynamic>('/documents/$documentId');
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không xóa được tài liệu');
+      throw mapDioException(e, fallback: 'Could not delete the document');
     }
   }
 
@@ -177,7 +177,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
       );
       return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không gộp được tài liệu');
+      throw mapDioException(e, fallback: 'Could not merge the documents');
     }
   }
 
@@ -200,7 +200,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
           )
           .toList(growable: false);
     } on DioException catch (e) {
-      throw mapDioException(e, fallback: 'Không tách được tài liệu');
+      throw mapDioException(e, fallback: 'Could not split the document');
     }
   }
 
@@ -212,7 +212,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     '/documents/$documentId/protect',
     documentId,
     password,
-    fallback: 'Không đặt được mật khẩu',
+    fallback: 'Could not set the password',
   );
 
   @override
@@ -223,7 +223,7 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     '/documents/$documentId/unprotect',
     documentId,
     password,
-    fallback: 'Không gỡ được mật khẩu',
+    fallback: 'Could not remove the password',
   );
 
   Future<DocumentItem> _passwordAction(

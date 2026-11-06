@@ -32,7 +32,7 @@ class AiChatRepositoryImpl implements AiChatRepository {
     } on DioException catch (error) {
       throw mapDioException(
         error,
-        fallback: 'Không tải được lịch sử hội thoại',
+        fallback: 'Could not load the conversation history',
       );
     }
   }
@@ -56,7 +56,7 @@ class AiChatRepositoryImpl implements AiChatRepository {
     } on DioException catch (error) {
       throw mapDioException(
         error,
-        fallback: 'Không tải được tin nhắn hội thoại',
+        fallback: 'Could not load the conversation messages',
       );
     }
   }

@@ -92,8 +92,8 @@ class _TextViewerScreenState extends State<TextViewerScreen> {
                       Expanded(
                         child: Text(
                           _translation == null
-                              ? 'Đã chọn: ${_selectedText!}'
-                              : 'Bản dịch: $_translation',
+                              ? 'Selected: ${_selectedText!}'
+                              : 'Translation: $_translation',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -110,7 +110,7 @@ class _TextViewerScreenState extends State<TextViewerScreen> {
                                 ),
                               )
                             : const Icon(Icons.translate),
-                        label: const Text('Dịch vùng chọn'),
+                        label: const Text('Translate selection'),
                       ),
                     ],
                   ),

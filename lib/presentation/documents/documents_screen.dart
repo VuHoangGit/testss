@@ -108,7 +108,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       final String? saved = await ref
           .read(documentsControllerProvider.notifier)
           .downloadDocument(doc);
-      if (saved != null) _showSnack('Đã lưu "${doc.name}"');
+      if (saved != null) _showSnack('Saved "${doc.name}"');
     });
   }
 

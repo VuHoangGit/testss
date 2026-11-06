@@ -67,7 +67,7 @@ void main() {
       ref,
       _decision('read_aloud', <String, dynamic>{'what': 'translation'}),
     );
-    expect(feedback, 'Chưa có bản dịch nào.');
+    expect(feedback, 'There is no translation yet.');
   });
 
   test('select_folder không khớp → phản hồi không tìm thấy', () async {
@@ -75,7 +75,7 @@ void main() {
       ref,
       _decision('select_folder', <String, dynamic>{'folder_name': 'abc'}),
     );
-    expect(feedback, contains('Không tìm thấy thư mục'));
+    expect(feedback, contains('No folder named'));
   });
 
   test('list_documents rỗng → báo chưa có tài liệu', () async {
@@ -83,7 +83,7 @@ void main() {
       ref,
       _decision('list_documents', <String, dynamic>{}),
     );
-    expect(feedback, 'Hiện chưa có tài liệu nào.');
+    expect(feedback, 'There are no documents yet.');
   });
 
   test('action lạ → không thực thi, trả thông báo', () async {
@@ -91,7 +91,7 @@ void main() {
       ref,
       _decision('open_youtube', <String, dynamic>{'url': 'x'}),
     );
-    expect(feedback, contains('chưa được hỗ trợ'));
+    expect(feedback, contains('not supported by voice'));
     expect(container.read(shellTabProvider), 0);
   });
 }

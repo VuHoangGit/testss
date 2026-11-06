@@ -62,7 +62,7 @@ Future<void> pickAndUploadWithProgress(
     if (name != null && context.mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('Đã tải lên "$name"')));
+        ..showSnackBar(SnackBar(content: Text('Uploaded "$name"')));
     }
   } on Exception catch (e) {
     if (context.mounted) {

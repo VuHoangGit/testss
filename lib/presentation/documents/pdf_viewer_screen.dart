@@ -80,7 +80,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         ),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Trang trước',
+            tooltip: 'Previous page',
             onPressed: () => _controller.previousPage(),
             icon: const Icon(Icons.chevron_left),
           ),
@@ -123,8 +123,8 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                       Expanded(
                         child: Text(
                           _translation == null
-                              ? 'Đã chọn: ${_selectedText!}'
-                              : 'Bản dịch: $_translation',
+                              ? 'Selected: ${_selectedText!}'
+                              : 'Translation: $_translation',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -141,7 +141,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                                 ),
                               )
                             : const Icon(Icons.translate),
-                        label: const Text('Dịch vùng chọn'),
+                        label: const Text('Translate selection'),
                       ),
                     ],
                   ),

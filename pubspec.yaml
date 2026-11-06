@@ -1,5 +1,5 @@
 name: testss
-description: "A new Flutter project."
+description: "DocuVault — document management with AI: OCR, translation, document chat and English voice commands."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev

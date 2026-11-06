@@ -33,12 +33,12 @@ class TestMerge:
         assert pdf_service.pdf_page_count(merged) == 5
 
     def test_merge_invalid_part_raises_value_error(self):
-        with pytest.raises(ValueError, match="không đọc được"):
+        with pytest.raises(ValueError, match="not a readable PDF"):
             pdf_service.merge_pdfs([make_pdf(1), b"rac"])
 
     def test_merge_encrypted_part_raises_value_error(self):
         locked = pdf_service.protect_pdf(make_pdf(1), "mk")
-        with pytest.raises(ValueError, match="mã hóa"):
+        with pytest.raises(ValueError, match="is encrypted"):
             pdf_service.merge_pdfs([locked])
 
 
@@ -47,7 +47,7 @@ class TestParseRanges:
         assert pdf_service.parse_page_ranges("1-3,5", 10) == [(1, 3), (5, 5)]
 
     def test_out_of_bounds_raises(self):
-        with pytest.raises(ValueError, match="ngoài tài liệu"):
+        with pytest.raises(ValueError, match="is outside the document"):
             pdf_service.parse_page_ranges("1-11", 10)
 
     def test_reversed_range_raises(self):
@@ -59,7 +59,7 @@ class TestParseRanges:
             pdf_service.parse_page_ranges("abc", 10)
 
     def test_empty_raises(self):
-        with pytest.raises(ValueError, match="Chưa nhập"):
+        with pytest.raises(ValueError, match="No page ranges provided"):
             pdf_service.parse_page_ranges("  ", 10)
 
 
@@ -71,7 +71,7 @@ class TestSplit:
 
     def test_split_encrypted_raises(self):
         locked = pdf_service.protect_pdf(make_pdf(2), "mk")
-        with pytest.raises(ValueError, match="mã hóa"):
+        with pytest.raises(ValueError, match="is encrypted"):
             pdf_service.split_pdf(locked, [(1, 1)])
 
 
@@ -91,14 +91,14 @@ class TestProtectUnprotect:
 
     def test_unprotect_wrong_password_raises(self):
         locked = pdf_service.protect_pdf(make_pdf(2), "matkhau123")
-        with pytest.raises(ValueError, match="không đúng"):
+        with pytest.raises(ValueError, match="Incorrect password"):
             pdf_service.unprotect_pdf(locked, "sai-roi")
 
     def test_unprotect_plain_document_raises(self):
-        with pytest.raises(ValueError, match="không có mật khẩu"):
+        with pytest.raises(ValueError, match="has no password"):
             pdf_service.unprotect_pdf(make_pdf(1), "bat-ky")
 
     def test_protect_encrypted_document_raises(self):
         locked = pdf_service.protect_pdf(make_pdf(1), "mk")
-        with pytest.raises(ValueError, match="đã có mật khẩu"):
+        with pytest.raises(ValueError, match="already has a password"):
             pdf_service.protect_pdf(locked, "mk2")

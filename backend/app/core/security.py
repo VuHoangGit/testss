@@ -15,7 +15,7 @@ from app.core.config import Settings, get_settings
 
 
 class AuthError(Exception):
-    """Lỗi xác thực — lớp API map ra HTTP 401 kèm message tiếng Việt."""
+    """Lỗi xác thực — lớp API map ra HTTP 401 kèm message tiếng Anh."""
 
     def __init__(self, message: str) -> None:
         self.message = message
@@ -53,7 +53,7 @@ def verify_supabase_token(token: str, *, settings: Settings | None = None) -> di
             leeway=30,
         )
     except jwt.PyJWKClientError as exc:
-        raise AuthError("Không xác minh được token (không nối được Supabase)") from exc
+        raise AuthError("Could not verify the token (Supabase is unreachable)") from exc
     except jwt.PyJWTError as exc:
-        raise AuthError("Token không hợp lệ hoặc đã hết hạn") from exc
+        raise AuthError("The token is invalid or has expired") from exc
     return payload

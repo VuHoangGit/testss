@@ -57,15 +57,15 @@ class PricingScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Free kỳ này: ${formatCredits(b.free)}/${formatCredits(b.monthlyFree)}'
-                      ' · Đã nạp: ${formatCredits(b.purchased)}'
-                      ' · Mỗi lượt AI: ${b.aiCost} credit',
+                      'Free this period: ${formatCredits(b.free)}/${formatCredits(b.monthlyFree)}'
+                      ' · Purchased: ${formatCredits(b.purchased)}'
+                      ' · Per AI call: ${b.aiCost} credits',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Free được reset 300 vào đầu mỗi tháng. '
-                      'Credit nạp không hết hạn.',
+                      'The 300 free credits reset at the start of each month. '
+                      'Purchased credits never expire.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -80,7 +80,7 @@ class PricingScreen extends ConsumerWidget {
                 ),
                 error: (Object e, StackTrace _) => Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Text('Không tải được số dư: $e'),
+                  child: Text('Could not load the balance: $e'),
                 ),
               ),
             ),

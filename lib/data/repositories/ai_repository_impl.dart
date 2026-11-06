@@ -2,8 +2,22 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
+import '../../core/error/exceptions.dart';
 import '../../core/network/dio_error_mapper.dart';
 import '../../domain/repositories/ai_repository.dart';
+
+/// Map lỗi gọi AI. Server trả 503 kèm `detail` tiếng Việt cho lỗi AI
+/// (vd "Không đọc được trang nào của tài liệu.") — hiện đúng câu đó thay vì
+/// câu chung "server đang có vấn đề". Vẫn dùng [NetworkException] để không
+/// bao giờ bị hiểu nhầm thành lỗi phiên (EC-16).
+Exception _mapAiError(DioException error, String fallback) {
+  final int? status = error.response?.statusCode;
+  final String? detail = extractDetail(error.response?.data);
+  if (status != null && status >= 500 && detail != null) {
+    return NetworkException(detail);
+  }
+  return mapDioException(error, fallback: fallback);
+}
 
 class AiRepositoryImpl implements AiRepository {
   AiRepositoryImpl({required this.dio});
@@ -17,15 +31,28 @@ class AiRepositoryImpl implements AiRepository {
         '/ai/ocr/$documentId',
       );
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
+      final List<dynamic> pages = data['pages'] as List<dynamic>? ?? <dynamic>[];
+      final List<dynamic> warnings =
+          data['warnings'] as List<dynamic>? ?? <dynamic>[];
       return OcrResult(
         text: data['text'] as String,
         keyValues: (data['key_values'] as Map<dynamic, dynamic>).map(
           (dynamic key, dynamic value) =>
               MapEntry(key.toString(), value.toString()),
         ),
+        pages: <OcrPage>[
+          for (final dynamic page in pages)
+            OcrPage(
+              page: page['page'] as int,
+              text: page['text'] as String? ?? '',
+              // server: "text-layer" = chữ có sẵn trong PDF, "vision" = AI đọc ảnh
+              fromTextLayer: page['source'] == 'text-layer',
+            ),
+        ],
+        warnings: <String>[for (final dynamic w in warnings) w.toString()],
       );
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không OCR được tài liệu');
+      throw _mapAiError(error, 'Could not run OCR on the document');
     }
   }
 
@@ -38,7 +65,7 @@ class AiRepositoryImpl implements AiRepository {
       );
       return Uint8List.fromList(response.data ?? <int>[]);
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không xuất được Word');
+      throw _mapAiError(error, 'Could not export to Word');
     }
   }
 
@@ -52,7 +79,7 @@ class AiRepositoryImpl implements AiRepository {
     } on DioException catch (error) {
       throw mapDioException(
         error,
-        fallback: 'Không đọc được nội dung tài liệu',
+        fallback: 'Could not read the document content',
       );
     }
   }
@@ -75,7 +102,7 @@ class AiRepositoryImpl implements AiRepository {
       );
       return (response.data as Map<String, dynamic>)['translation'] as String;
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không dịch được đoạn văn');
+      throw mapDioException(error, fallback: 'Could not translate the text');
     }
   }
 
@@ -94,7 +121,7 @@ class AiRepositoryImpl implements AiRepository {
       );
       return (response.data as Map<String, dynamic>)['answer'] as String;
     } on DioException catch (error) {
-      throw mapDioException(error, fallback: 'Không nhận được câu trả lời AI');
+      throw _mapAiError(error, 'Could not get an answer from the AI');
     }
   }
 
@@ -140,7 +167,7 @@ class AiRepositoryImpl implements AiRepository {
     } on DioException catch (error) {
       throw mapDioException(
         error,
-        fallback: 'Không phân tích được lệnh giọng nói',
+        fallback: 'Could not interpret the voice command',
       );
     }
   }

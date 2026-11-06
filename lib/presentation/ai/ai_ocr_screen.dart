@@ -37,9 +37,7 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
   Future<void> _runOcr(String documentId) => _run(() async {
     final AiRepository ai = ref.read(aiRepositoryProvider);
     final OcrResult result = await ai.ocr(documentId);
-    ref
-        .read(lastAiResultsProvider.notifier)
-        .setOcr(result.text, result.keyValues);
+    ref.read(lastAiResultsProvider.notifier).setOcrResult(result);
   });
 
   Future<void> _exportWord(String documentId) => _run(() async {
@@ -201,7 +199,7 @@ class _ProcessingCard extends StatelessWidget {
   }
 }
 
-/// Trạng thái 3 — kết quả: tabs Preview text / Key-value fields.
+/// Trạng thái 3 — kết quả: tabs Preview text / Pages / Key-value fields.
 class _OcrResultCard extends StatelessWidget {
   const _OcrResultCard({required this.last});
 
@@ -210,17 +208,22 @@ class _OcrResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool hasKeyValues = last.ocrKeyValues.isNotEmpty;
+    final bool hasPages = last.ocrPages.length > 1;
+    final int tabCount = 1 + (hasPages ? 1 : 0) + (hasKeyValues ? 1 : 0);
     return DefaultTabController(
-      length: hasKeyValues ? 2 : 1,
+      length: tabCount,
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: <Widget>[
+            if (last.ocrWarnings.isNotEmpty)
+              _OcrWarnings(warnings: last.ocrWarnings),
             TabBar(
               isScrollable: true,
               tabs: <Widget>[
                 const Tab(text: 'Preview text'),
-                if (hasKeyValues) const Tab(text: 'Key-value fields'),
+                if (hasPages) const Tab(text: 'Pages'),
+                if (hasKeyValues) const Tab(text: 'Fields'),
               ],
             ),
             SizedBox(
@@ -237,6 +240,35 @@ class _OcrResultCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (hasPages)
+                    ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: last.ocrPages.length,
+                      separatorBuilder: (_, _) => const Divider(height: 1),
+                      itemBuilder: (BuildContext context, int index) {
+                        final OcrPage page = last.ocrPages[index];
+                        return ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: Text('Page ${page.page}'),
+                          subtitle: Text(
+                            page.fromTextLayer
+                                ? 'Text layer of the PDF'
+                                : 'Read from the page image',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          children: <Widget>[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: SelectableText(
+                                page.text,
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(height: 1.5),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   if (hasKeyValues)
                     ListView.separated(
                       padding: const EdgeInsets.all(16),
@@ -263,6 +295,52 @@ class _OcrResultCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Cảnh báo hậu kiểm — nhắc người dùng đối soát với ảnh trang gốc.
+class _OcrWarnings extends StatelessWidget {
+  const _OcrWarnings({required this.warnings});
+
+  final List<String> warnings;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: colors.tertiaryContainer,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(Icons.error_outline, size: 18, color: colors.tertiary),
+              const SizedBox(width: 8),
+              Text(
+                'Check these before using the result',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: colors.onTertiaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final String warning in warnings)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '• $warning',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: colors.onTertiaryContainer,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -189,7 +189,7 @@ def test_delete_conversation_removes_messages(
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
-    assert resp.json() == {"detail": "Đã xóa hội thoại"}
+    assert resp.json() == {"detail": "Conversation deleted"}
 
     with db_session_factory() as db:
         assert db.query(AiConversation).count() == 0

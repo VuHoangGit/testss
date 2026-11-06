@@ -19,7 +19,7 @@ class ThemeToggleButton extends ConsumerWidget {
         controller.effectiveBrightness(platform) == Brightness.dark;
 
     return IconButton(
-      tooltip: isDark ? 'Chuyển sang chế độ sáng' : 'Chuyển sang chế độ tối',
+      tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
       onPressed: () => controller.toggle(platform),
       icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
     );

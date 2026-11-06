@@ -24,7 +24,7 @@ def get_current_user(
     db: DbSession,
 ) -> User:
     if credentials is None:
-        raise AuthError("Chưa đăng nhập")
+        raise AuthError("Not signed in")
     payload = verify_supabase_token(credentials.credentials)
 
     # Giữ cơ chế lọc domain email nếu cấu hình (rỗng = mở cho mọi account)
@@ -33,7 +33,7 @@ def get_current_user(
     if domains and (
         not isinstance(email, str) or email.rsplit("@", 1)[-1].lower() not in domains
     ):
-        raise AuthError("Email không thuộc domain được phép")
+        raise AuthError("Email is not in an allowed domain")
 
     # Profile (tên/ảnh) nằm trong user_metadata — Google provider điền sẵn
     raw_metadata = payload.get("user_metadata")

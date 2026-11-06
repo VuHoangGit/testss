@@ -19,100 +19,105 @@ MAX_HISTORY_TURNS = 10
 
 _TABS = ("dashboard", "documents", "ai", "account")
 _TAB_LABELS = {
-    "dashboard": "Tổng quan",
-    "documents": "Tài liệu",
+    "dashboard": "Overview",
+    "documents": "Documents",
     "ai": "AI",
-    "account": "Tài khoản",
+    "account": "Account",
 }
 _AI_TOOLS = ("ocr", "chat", "translate")
-_AI_TOOL_LABELS = {"ocr": "OCR", "chat": "Chat với AI", "translate": "Dịch văn bản"}
+_AI_TOOL_LABELS = {"ocr": "OCR", "chat": "Chat with AI", "translate": "Translate text"}
 _READ_TARGETS = ("ocr_result", "chat_answer", "translation", "reply")
 
 # Registry action: nguồn duy nhất cho (1) khai báo tool gửi AI và
 # (2) validate tham số trả về. Kiểu tham số: "string" | "array".
 _ACTIONS: dict[str, dict[str, object]] = {
     "navigate_tab": {
-        "description": "Chuyển sang tab của ứng dụng.",
+        "description": "Switch to one of the app tabs.",
         "params": {"tab": {"type": "string", "enum": list(_TABS)}},
         "required": ("tab",),
-        "reply": "Đã chuyển đến tab {tab}.",
+        "reply": "Switched to the {tab} tab.",
     },
     "open_ai_tool": {
-        "description": "Mở một công cụ trong tab AI.",
+        "description": "Open one of the tools in the AI tab.",
         "params": {"tool": {"type": "string", "enum": list(_AI_TOOLS)}},
         "required": ("tool",),
-        "reply": "Đã mở công cụ {tool}.",
+        "reply": "Opened the {tool} tool.",
     },
     "select_folder": {
-        "description": "Lọc danh sách tài liệu theo thư mục.",
+        "description": "Filter the document list by folder.",
         "params": {"folder_name": {"type": "string"}},
         "required": ("folder_name",),
-        "reply": "Đã lọc theo thư mục {folder_name}.",
+        "reply": "Filtered documents by the {folder_name} folder.",
     },
     "list_documents": {
-        "description": "Liệt kê tài liệu hiện có (toàn bộ hoặc trong một thư mục).",
+        "description": "List the available documents (all, or inside one folder).",
         "params": {"folder_name": {"type": "string"}},
         "required": (),
-        "reply": "Đang liệt kê tài liệu.",
+        "reply": "Listing documents.",
     },
     "open_document": {
-        "description": "Mở một tài liệu trong trình xem PDF.",
+        "description": "Open a document in the PDF viewer.",
         "params": {"name_query": {"type": "string"}},
         "required": ("name_query",),
-        "reply": "Đang mở tài liệu {name_query}.",
+        "reply": "Opening {name_query}.",
     },
     "run_ocr": {
-        "description": "Chạy OCR trích xuất văn bản cho một tài liệu.",
+        "description": "Run OCR to extract text from a document.",
         "params": {"name_query": {"type": "string"}},
         "required": ("name_query",),
-        "reply": "Đang quét OCR tài liệu {name_query}.",
+        "reply": "Running OCR on {name_query}.",
     },
     "ask_chat": {
-        "description": "Hỏi đáp AI về một tài liệu (chat với tài liệu).",
+        "description": "Ask the AI a question about a document (chat with the document).",
         "params": {"question": {"type": "string"}, "name_query": {"type": "string"}},
         "required": ("question",),
-        "reply": "Đang tìm câu trả lời.",
+        "reply": "Looking up the answer.",
     },
     "translate_text": {
-        "description": "Dịch một đoạn văn bản.",
+        "description": "Translate a piece of text.",
         "params": {"text": {"type": "string"}, "target_language": {"type": "string"}},
         "required": ("text",),
-        "reply": "Đang dịch đoạn văn.",
+        "reply": "Translating the text.",
     },
     "read_aloud": {
-        "description": "Đọc to nội dung đang hiển thị.",
+        "description": "Read the currently shown content out loud.",
         "params": {"what": {"type": "string", "enum": list(_READ_TARGETS)}},
         "required": (),
-        "reply": "Đang đọc nội dung.",
+        "reply": "Reading the content out loud.",
     },
     "stop_speaking": {
-        "description": "Dừng việc đọc to đang phát.",
+        "description": "Stop the current read-aloud playback.",
         "params": {},
         "required": (),
-        "reply": "Đã dừng đọc.",
+        "reply": "Stopped reading.",
     },
     "delete_document": {
-        "description": "Xóa một tài liệu — ứng dụng sẽ hiện hộp thoại xác nhận, không xóa ngay.",
+        "description": (
+            "Delete a document — the app shows a confirmation dialog, "
+            "nothing is deleted immediately."
+        ),
         "params": {"name_query": {"type": "string"}},
         "required": ("name_query",),
-        "reply": "Chờ xác nhận xóa tài liệu {name_query}.",
+        "reply": "Waiting for confirmation to delete {name_query}.",
     },
     "merge_documents": {
-        "description": "Gộp nhiều PDF — ứng dụng sẽ hiện hộp thoại đặt tên để duyệt lại.",
+        "description": (
+            "Merge several PDFs — the app shows a naming dialog so the user can review."
+        ),
         "params": {
             "names": {"type": "array"},
             "new_name": {"type": "string"},
         },
         "required": (),
-        "reply": "Chờ xác nhận gộp tài liệu.",
+        "reply": "Waiting for confirmation to merge the documents.",
     },
     "split_document": {
         "description": (
-            "Tách PDF theo khoảng trang — ứng dụng sẽ hiện hộp thoại nhập lại khoảng trang."
+            "Split a PDF by page ranges — the app shows a dialog to review the ranges."
         ),
         "params": {"name_query": {"type": "string"}, "ranges": {"type": "string"}},
         "required": ("name_query",),
-        "reply": "Chờ nhập khoảng trang để tách.",
+        "reply": "Waiting for the page ranges to split.",
     },
 }
 
@@ -120,13 +125,14 @@ _ACTIONS: dict[str, dict[str, object]] = {
 _HISTORY: dict[str, list[dict[str, object]]] = {}
 
 _SYSTEM_PROMPT = (
-    "Bạn là trợ lý giọng nói tiếng Việt của ứng dụng DocuVault (quản lý tài liệu + AI). "
-    "Nhiệm vụ: hiểu lệnh nói của người dùng và chọn ĐÚNG MỘT công cụ trong danh sách công cụ. "
-    "Người dùng có thể nói ngắn gọn, dùng từ đồng nghĩa hoặc không chính xác — hãy suy luận. "
-    "Nếu lệnh mơ hồ hoặc thiếu tham số bắt buộc, KHÔNG gọi công cụ và không bịa tham số: "
-    "hãy hỏi lại ngắn gọn bằng tiếng Việt. "
-    "Tham số tài liệu/thư mục luôn là TÊN (đúng như danh sách trong ngữ cảnh), không phải id. "
-    "Chỉ gọi công cụ cho các thao tác liên quan tài liệu, thư mục, OCR, dịch, chat AI của ứng dụng."
+    "You are the English-speaking voice assistant of DocuVault (document management + AI). "
+    "Your job: understand the user's spoken command and choose EXACTLY ONE tool from the tool list. "
+    "Users speak English and may be brief, use synonyms or be imprecise — reason about it. "
+    "If the command is ambiguous or a required parameter is missing, do NOT call a tool and do not "
+    "invent parameters: ask a short follow-up question in English. "
+    "Document/folder parameters are always NAMES (exactly as listed in the context), never ids. "
+    "Only call tools for operations on documents, folders, OCR, translation and AI chat of this app. "
+    "Always answer in English."
 )
 
 
@@ -147,7 +153,7 @@ def _tools() -> list[dict[str, object]]:
             if "enum" in param_spec:
                 prop["enum"] = param_spec["enum"]
             if param_name in spec["required"]:  # type: ignore[operator]
-                prop["description"] = "Bắt buộc."
+                prop["description"] = "Required."
             properties[param_name] = prop
         tools.append(
             {
@@ -165,23 +171,23 @@ def _tools() -> list[dict[str, object]]:
 
 def _describe_documents(documents: list[VoiceDocument]) -> str:
     if not documents:
-        return "(chưa có tài liệu nào)"
+        return "(no documents yet)"
     return "\n".join(
-        f"- {d.name} ({d.mime_type or 'không rõ loại'})" for d in documents[:80]
+        f"- {d.name} ({d.mime_type or 'unknown type'})" for d in documents[:80]
     )
 
 
 def _build_prompt(transcript: str, context: VoiceAppContext) -> str:
-    folder_names = ", ".join(f.name for f in context.folders) or "(chưa có thư mục nào)"
-    current = context.current_tab or "không rõ"
+    folder_names = ", ".join(f.name for f in context.folders) or "(no folders yet)"
+    current = context.current_tab or "unknown"
     lines = [
-        "Ngữ cảnh ứng dụng DocuVault:",
-        f"- Tab hiện tại: {_TAB_LABELS.get(current, current)}",
-        f"- Danh sách thư mục: {folder_names}",
-        "- Danh sách tài liệu:",
+        "DocuVault app context:",
+        f"- Current tab: {_TAB_LABELS.get(current, current)}",
+        f"- Folders: {folder_names}",
+        "- Documents:",
         _describe_documents(context.documents),
         "",
-        "Người dùng nói:",
+        "The user said:",
         transcript,
     ]
     return "\n".join(lines)
@@ -200,16 +206,16 @@ def _validate(action: str, args: dict) -> tuple[dict | None, str | None]:
         value = args.get(name)
         if value is None or value == "":
             if name in required:
-                return None, f"Lệnh thiếu thông tin bắt buộc ({name})"
+                return None, f"Command is missing a required parameter ({name})"
             continue
         expected = param_spec["type"]
         if expected == "string" and not isinstance(value, str):
-            return None, f"Tham số {name} phải là chuỗi"
+            return None, f"Parameter {name} must be a string"
         if expected == "array":
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-                return None, f"Tham số {name} phải là danh sách tên"
+                return None, f"Parameter {name} must be a list of names"
         if "enum" in param_spec and value not in param_spec["enum"]:
-            return None, f"Giá trị {name} không hợp lệ"
+            return None, f"Invalid value for {name}"
         clean[name] = value
     return clean, None
 
@@ -257,7 +263,7 @@ def interpret(transcript: str, context: VoiceAppContext, session_id: str) -> Voi
     try:
         blocks = response["content"]
     except (KeyError, TypeError) as exc:
-        raise VoiceCommandError("Dịch vụ AI không trả về nội dung") from exc
+        raise VoiceCommandError("The AI service returned no content") from exc
     for block in blocks:
         if not isinstance(block, dict):
             continue
@@ -266,11 +272,11 @@ def interpret(transcript: str, context: VoiceAppContext, session_id: str) -> Voi
         elif block.get("type") == "text" and not text_reply:
             text_reply = str(block["text"])
     if not text_reply and function_call is None:
-        raise VoiceCommandError("Dịch vụ AI không trả về nội dung")
+        raise VoiceCommandError("The AI service returned no content")
 
     if function_call is None:
         _remember(session_id, transcript, text_reply)
-        fallback = "Xin lỗi, tôi chưa hiểu lệnh này."
+        fallback = "Sorry, I didn't understand that command."
         return VoiceCommandResponse(
             action=None, params={}, reply=text_reply.strip() or fallback
         )
@@ -280,7 +286,7 @@ def interpret(transcript: str, context: VoiceAppContext, session_id: str) -> Voi
     if not isinstance(args, dict):
         args = {}
     if name not in _ACTIONS:
-        reply = "Tính năng này chưa được hỗ trợ bằng giọng nói."
+        reply = "That feature is not supported by voice yet."
         _remember(session_id, transcript, reply)
         return VoiceCommandResponse(action=None, params={}, reply=reply)
     clean, error = _validate(name, args)
