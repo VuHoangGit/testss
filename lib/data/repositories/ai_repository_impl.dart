@@ -6,6 +6,26 @@ import '../../core/error/exceptions.dart';
 import '../../core/network/dio_error_mapper.dart';
 import '../../domain/repositories/ai_repository.dart';
 
+/// Chờ một lượt OCR: backend đọc tối đa 20 trang, trang scan đo được
+/// ~15–28 giây/trang (≈ 5–9 phút cho cả tài liệu) → để 15 phút cho thoáng.
+///
+/// Phải nới **cả** `connectTimeout` lẫn `receiveTimeout`: dio-web coi
+/// `connectTimeout` là "hết giờ chờ byte đầu tiên" và **huỷ XHR** khi server
+/// chưa gửi header. Server chỉ gửi header sau khi OCR xong (chục giây đến vài
+/// phút), nên mức mặc định 10 giây của `buildDio` làm lượt xuất Word/OCR luôn
+/// bị huỷ giữa chừng và báo nhầm thành "Could not connect to the server".
+const Duration _ocrWait = Duration(minutes: 15);
+
+/// Chờ một lượt gọi LLM (chat/dịch/voice): backend tự cắt ở 90 giây/lượt.
+const Duration _llmWait = Duration(minutes: 3);
+
+/// Options cho request AI chạy lâu — web cộng hai mốc thành hạn cứng của XHR.
+Options _longRequest(Duration wait, {ResponseType? responseType}) => Options(
+  responseType: responseType,
+  connectTimeout: wait,
+  receiveTimeout: wait,
+);
+
 /// Map lỗi gọi AI. Server trả 503 kèm `detail` tiếng Việt cho lỗi AI
 /// (vd "Không đọc được trang nào của tài liệu.") — hiện đúng câu đó thay vì
 /// câu chung "server đang có vấn đề". Vẫn dùng [NetworkException] để không
@@ -29,6 +49,7 @@ class AiRepositoryImpl implements AiRepository {
     try {
       final Response<dynamic> response = await dio.post<dynamic>(
         '/ai/ocr/$documentId',
+        options: _longRequest(_ocrWait),
       );
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
       final List<dynamic> pages = data['pages'] as List<dynamic>? ?? <dynamic>[];
@@ -61,7 +82,7 @@ class AiRepositoryImpl implements AiRepository {
     try {
       final Response<List<int>> response = await dio.post<List<int>>(
         '/ai/ocr/$documentId/word',
-        options: Options(responseType: ResponseType.bytes),
+        options: _longRequest(_ocrWait, responseType: ResponseType.bytes),
       );
       return Uint8List.fromList(response.data ?? <int>[]);
     } on DioException catch (error) {
@@ -99,6 +120,7 @@ class AiRepositoryImpl implements AiRepository {
           if (sourceLanguage != null && sourceLanguage.trim().isNotEmpty)
             'source_language': sourceLanguage.trim(),
         },
+        options: _longRequest(_llmWait),
       );
       return (response.data as Map<String, dynamic>)['translation'] as String;
     } on DioException catch (error) {
@@ -118,6 +140,7 @@ class AiRepositoryImpl implements AiRepository {
           'question': question,
           'document_ids': documentIds,
         },
+        options: _longRequest(_llmWait),
       );
       return (response.data as Map<String, dynamic>)['answer'] as String;
     } on DioException catch (error) {
@@ -153,6 +176,7 @@ class AiRepositoryImpl implements AiRepository {
             ],
           },
         },
+        options: _longRequest(_llmWait),
       );
       final Map<String, dynamic> data = response.data as Map<String, dynamic>;
       return VoiceCommandResult(

@@ -36,9 +36,14 @@ Exception mapDioException(
     return const NetworkException('The server is having problems, please try again later');
   }
   switch (e.type) {
+    // Hết giờ chờ KHÁC với mất kết nối: server vẫn sống, chỉ là xử lý lâu hơn
+    // mức client chờ — nói đúng để người dùng thử lại thay vì tưởng backend chết.
     case DioExceptionType.connectionTimeout:
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
+      return const NetworkException(
+        'The server took too long to respond, please try again',
+      );
     case DioExceptionType.connectionError:
       return const NetworkException();
     default:
