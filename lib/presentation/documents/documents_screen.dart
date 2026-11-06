@@ -731,7 +731,7 @@ class _DocumentTile extends StatelessWidget {
     final String size = mb >= 1
         ? '${mb.toStringAsFixed(1)} MB'
         : '${(doc.sizeBytes / 1024).toStringAsFixed(0)} KB';
-    return doc.pageCount != null ? '${doc.pageCount} trang · $size' : size;
+    return doc.pageCount != null ? '${doc.pageCount} pages · $size' : size;
   }
 
   @override

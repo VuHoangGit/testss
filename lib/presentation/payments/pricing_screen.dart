@@ -87,7 +87,7 @@ class PricingScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'CHỌN GÓI NẠP',
+            'CHOOSE A TOP-UP PACKAGE',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               letterSpacing: 1.1,
               fontWeight: FontWeight.w700,
