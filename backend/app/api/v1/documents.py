@@ -4,13 +4,14 @@
 
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DatabaseSession
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, upload_rate_limit
 from app.core.config import get_settings
 from app.models.document import Document
 from app.models.folder import Folder
@@ -21,6 +22,7 @@ from app.schemas.documents import (
     MergeRequest,
     ProtectRequest,
     SplitRequest,
+    StorageUsageOut,
     UnprotectRequest,
 )
 from app.services import pdf_service, storage_service
@@ -28,6 +30,97 @@ from app.services import pdf_service, storage_service
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 _PDF_MIME = "application/pdf"
+
+# Đuôi file → MIME do SERVER quyết định. Không dùng `content_type` client khai:
+# client có thể gửi text/html cho file .pdf rồi lừa trình duyệt render HTML trên
+# origin của API (stored XSS). Đuôi không có trong bảng = không nhận.
+_EXTENSION_MIME: dict[str, str] = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "txt": "text/plain",
+    "md": "text/markdown",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "gif": "image/gif",
+    "zip": "application/zip",
+}
+
+# Chỉ những MIME này được trả lại khi download; còn lại ép octet-stream để
+# trình duyệt tải về chứ không render tại chỗ.
+_SAFE_DOWNLOAD_MIMES = frozenset(_EXTENSION_MIME.values())
+
+# Đọc upload theo chunk 1 MB: file lớn hơn hạn mức bị chặn NGAY khi vượt, không
+# nạp cả file vào RAM trước rồi mới kiểm tra (một request 2 GB từng làm sập worker).
+_READ_CHUNK_BYTES = 1024 * 1024
+
+
+def _resolve_upload_mime(original_name: str) -> str:
+    """Chọn MIME theo đuôi file; đuôi ngoài danh sách cho phép → HTTP 415."""
+    extension = Path(original_name).suffix.lower().lstrip(".")
+    allowed = get_settings().allowed_upload_type_list
+    if extension not in allowed or extension not in _EXTENSION_MIME:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Unsupported file type '{extension or 'unknown'}'. "
+                f"Allowed: {', '.join(allowed)}"
+            ),
+        )
+    return _EXTENSION_MIME[extension]
+
+
+async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
+    """Đọc nội dung upload, dừng và trả 413 ngay khi vượt `max_bytes`."""
+    declared = getattr(file, "size", None)
+    if isinstance(declared, int) and declared > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds {get_settings().max_upload_mb} MB",
+        )
+    buffer = bytearray()
+    while chunk := await file.read(_READ_CHUNK_BYTES):
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds {get_settings().max_upload_mb} MB",
+            )
+    return bytes(buffer)
+
+
+def _used_bytes(db: DatabaseSession, owner_id: uuid.UUID) -> int:
+    """Tổng dung lượng tài liệu của user (byte)."""
+    total = db.scalar(
+        select(func.coalesce(func.sum(Document.size_bytes), 0)).where(
+            Document.owner_id == owner_id
+        )
+    )
+    return int(total or 0)
+
+
+def _ensure_storage_quota(
+    db: DatabaseSession, owner_id: uuid.UUID, incoming_bytes: int
+) -> None:
+    """Chặn khi upload thêm sẽ vượt quota dung lượng của user → HTTP 413."""
+    quota_mb = get_settings().user_storage_quota_mb
+    if quota_mb <= 0:
+        return
+    quota_bytes = quota_mb * 1024 * 1024
+    used = _used_bytes(db, owner_id)
+    if used + incoming_bytes > quota_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Storage quota exceeded ({used / 1024 / 1024:.1f} MB of "
+                f"{quota_mb} MB used, file needs {incoming_bytes / 1024 / 1024:.1f} MB)"
+            ),
+        )
 
 
 def _get_owned_document(db: DatabaseSession, document_id: uuid.UUID, user_id) -> Document:
@@ -97,7 +190,12 @@ def list_documents(
     return list(db.scalars(stmt))
 
 
-@router.post("", response_model=DocumentOut, status_code=201)
+@router.post(
+    "",
+    response_model=DocumentOut,
+    status_code=201,
+    dependencies=[Depends(upload_rate_limit)],
+)
 async def upload_document(
     db: DbSession,
     current: CurrentUser,
@@ -112,17 +210,16 @@ async def upload_document(
         if folder is None or folder.owner_id != user.id:
             raise HTTPException(status_code=404, detail="Target folder not found")
 
+    name = (file.filename or "khong-ten").strip()[:255]
+    # MIME do server quyết định theo đuôi — kiểm tra TRƯỚC khi đọc nội dung
+    mime = _resolve_upload_mime(name)
+
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
-    data = await file.read()
-    if len(data) > max_bytes:
-        raise HTTPException(
-            status_code=413, detail=f"File exceeds {get_settings().max_upload_mb} MB"
-        )
+    data = await _read_upload_limited(file, max_bytes)
     if not data:
         raise HTTPException(status_code=400, detail="File is empty")
+    _ensure_storage_quota(db, user.id, len(data))
 
-    name = (file.filename or "khong-ten").strip()[:255]
-    mime = file.content_type or "application/octet-stream"
     key = storage_service.build_storage_key(name)
     storage_service.save_document_bytes(data, key)
     doc = Document(
@@ -168,11 +265,27 @@ def mark_opened(
     return DocumentOut.model_validate(doc)
 
 
+@router.get("/usage", response_model=StorageUsageOut)
+def get_storage_usage(db: DbSession, current: CurrentUser) -> StorageUsageOut:
+    """Dung lượng tài liệu đã dùng và hạn mức của user (hiển thị ở trang Tài khoản)."""
+    quota_mb = get_settings().user_storage_quota_mb
+    return StorageUsageOut(
+        used_bytes=_used_bytes(db, current.id),
+        quota_bytes=quota_mb * 1024 * 1024 if quota_mb > 0 else None,
+    )
+
+
 @router.get("/{document_id}/download")
 def download_document(
     document_id: uuid.UUID, db: DbSession, current: CurrentUser
 ) -> FileResponse:
-    """Tải file gốc về máy."""
+    """Tải file gốc về máy.
+
+    MIME lưu trong DB có thể do client khai từ trước (dữ liệu cũ) nên chỉ trả
+    lại khi nằm trong danh sách an toàn; còn lại ép `application/octet-stream`
+    để trình duyệt tải về thay vì render. `nosniff` chặn trình duyệt tự đoán
+    kiểu nội dung (tránh stored XSS qua file upload).
+    """
     user = current
     doc = _get_owned_document(db, document_id, user.id)
     try:
@@ -181,7 +294,17 @@ def download_document(
         raise HTTPException(status_code=500, detail="Invalid storage key") from exc
     if not path.exists():
         raise HTTPException(status_code=410, detail="File is no longer available on the server")
-    return FileResponse(path, filename=doc.original_name, media_type=doc.mime_type)
+    media_type = (
+        doc.mime_type
+        if doc.mime_type in _SAFE_DOWNLOAD_MIMES
+        else "application/octet-stream"
+    )
+    return FileResponse(
+        path,
+        filename=doc.original_name,
+        media_type=media_type,
+        headers={"X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.delete("/{document_id}")

@@ -36,6 +36,13 @@ class FavoriteRequest(BaseModel):
     favorite: bool
 
 
+class StorageUsageOut(BaseModel):
+    """Dung lượng tài liệu đã dùng so với hạn mức (`quota_bytes=None` = không giới hạn)."""
+
+    used_bytes: int
+    quota_bytes: int | None = None
+
+
 class MergeRequest(BaseModel):
     document_ids: list[uuid.UUID] = Field(min_length=2)
     name: str = Field(min_length=1, max_length=255)

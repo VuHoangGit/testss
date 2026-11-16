@@ -1,12 +1,13 @@
-"""Dependency xác thực: Bearer token Supabase → user local."""
+"""Dependency xác thực: Bearer token Supabase → user local + giới hạn tần suất."""
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session as DatabaseSession
 
 from app.core.config import get_settings
+from app.core.ratelimit import get_limiter
 from app.core.security import AuthError, verify_supabase_token
 from app.db.session import get_db
 from app.models.user import User
@@ -61,3 +62,35 @@ def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def _enforce_rate_limit(group: str, user_id: object, max_calls: int) -> None:
+    """Chặn khi user vượt hạn mức `max_calls` lượt/phút → HTTP 429 + Retry-After."""
+    retry_after = get_limiter(group).hit(f"user:{user_id}", max_calls, 60.0)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests — please slow down and try again",
+            headers={"Retry-After": str(int(retry_after) + 1)},
+        )
+
+
+def ai_rate_limit(current: CurrentUser) -> None:
+    """Giới hạn lượt gọi AI theo user (mỗi lượt là tiền thật trả nhà cung cấp AI)."""
+    settings = get_settings()
+    if settings.rate_limit_enabled:
+        _enforce_rate_limit("ai", current.id, settings.rate_limit_ai_per_minute)
+
+
+def upload_rate_limit(current: CurrentUser) -> None:
+    """Giới hạn lượt upload theo user (chặn spam đầy đĩa)."""
+    settings = get_settings()
+    if settings.rate_limit_enabled:
+        _enforce_rate_limit("upload", current.id, settings.rate_limit_upload_per_minute)
+
+
+def order_rate_limit(current: CurrentUser) -> None:
+    """Giới hạn lượt tạo đơn nạp theo user (chặn spam bảng payments)."""
+    settings = get_settings()
+    if settings.rate_limit_enabled:
+        _enforce_rate_limit("orders", current.id, settings.rate_limit_orders_per_minute)

@@ -71,7 +71,9 @@ def test_voice_command_maps_infra_error_to_503(client, monkeypatch, make_token):
     monkeypatch.setattr(
         "app.api.v1.ai.voice_command_service.interpret",
         lambda transcript, context, session_id: (_ for _ in ()).throw(
-            VoiceCommandError("AI is not configured: ANTHROPIC_AUTH_TOKEN is missing on the backend")
+            VoiceCommandError(
+                "AI is not configured: ANTHROPIC_AUTH_TOKEN is missing on the backend"
+            )
         ),
     )
     response = client.post(
@@ -213,7 +215,9 @@ def test_interpret_prompt_contains_names_but_not_ids(monkeypatch):
             )
         ],
     )
-    voice_command_service.interpret(transcript="open the contract file", context=context, session_id="s7")
+    voice_command_service.interpret(
+        transcript="open the contract file", context=context, session_id="s7"
+    )
     prompt = captured["payload"]["messages"][-1]["content"]
     assert "hop-dong-2024.pdf" in prompt
     assert "d1" not in prompt

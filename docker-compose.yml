@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: docuvault
       POSTGRES_DB: docuvault
     ports:
-      - "5432:5432"
+      # Chỉ mở trên loopback: Postgres dev có mật khẩu yếu, KHÔNG được phơi ra
+      # LAN/Internet (0.0.0.0:5432 cho phép máy khác trong mạng đăng nhập).
+      - "127.0.0.1:5432:5432"
     volumes:
       - docuvault_pgdata:/var/lib/postgresql/data
     healthcheck:

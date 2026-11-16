@@ -9,6 +9,9 @@ import os
 
 os.environ.setdefault("SUPABASE_URL", "https://test-project.supabase.co")
 os.environ.setdefault("CORS_ORIGINS", "")
+# Rate limit mặc định TẮT trong test để suite không phụ thuộc thời gian; test
+# riêng của rate limit tự bật lại bằng biến môi trường (xem test_security.py).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta

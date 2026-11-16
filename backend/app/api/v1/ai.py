@@ -3,12 +3,13 @@
 import dataclasses
 import uuid
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, ai_rate_limit
 from app.models.conversation import AiConversation
 from app.models.document import Document
 from app.models.message import AiMessage
@@ -34,7 +35,9 @@ from app.services import (
     voice_command_service,
 )
 
-router = APIRouter(prefix="/ai", tags=["ai"])
+# Mọi endpoint AI đều tốn tiền gọi nhà cung cấp AI → giới hạn tần suất ở mức
+# router để không endpoint nào bị bỏ sót khi thêm route mới.
+router = APIRouter(prefix="/ai", tags=["ai"], dependencies=[Depends(ai_rate_limit)])
 
 
 def _charge_ai(db, user) -> None:
@@ -43,6 +46,22 @@ def _charge_ai(db, user) -> None:
         credit_service.charge(db, user)
     except credit_service.InsufficientCredits as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
+
+
+def _attachment_header(filename: str) -> str:
+    """Dựng `Content-Disposition` an toàn từ tên file do người dùng đặt.
+
+    `original_name` là dữ liệu client gửi lên — chèn thẳng vào header thì dấu
+    `"`/CR/LF có thể phá header hoặc chèn thêm tham số. Tên ASCII được lọc, tên
+    đầy đủ (tiếng Việt) đi qua `filename*` đã percent-encode.
+    """
+    safe_ascii = "".join(
+        ch for ch in filename if ch.isascii() and ch.isprintable() and ch not in '"\\;'
+    ).strip() or "document"
+    return (
+        f'attachment; filename="{safe_ascii}"; '
+        f"filename*=UTF-8''{quote(filename, safe='')}"
+    )
 
 
 def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
@@ -117,7 +136,10 @@ def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Res
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": f'attachment; filename="{document.original_name}.docx"'},
+        headers={
+            "Content-Disposition": _attachment_header(f"{document.original_name}.docx"),
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 

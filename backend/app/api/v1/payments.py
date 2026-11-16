@@ -6,9 +6,9 @@ import secrets
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, order_rate_limit
 from app.core.config import get_settings
 from app.schemas.payment import (
     CreateOrderRequest,
@@ -65,7 +65,12 @@ def get_credits(db: DbSession, current: CurrentUser) -> CreditBalanceOut:
     )
 
 
-@router.post("/orders", response_model=OrderOut, status_code=201)
+@router.post(
+    "/orders",
+    response_model=OrderOut,
+    status_code=201,
+    dependencies=[Depends(order_rate_limit)],
+)
 def create_order(
     body: CreateOrderRequest, db: DbSession, current: CurrentUser
 ) -> OrderOut:
@@ -126,15 +131,13 @@ def receive_sepay_webhook(
     scheme, received_secret = _parse_authorization(authorization)
     received_secret = x_webhook_secret or received_secret
     if not received_secret or not secrets.compare_digest(received_secret, configured_secret):
-        # Log dạng băm: đủ để biết "khớp hay không" mà không ghi secret vào file log
+        # Chỉ log dạng băm của giá trị NHẬN ĐƯỢC (đủ để đối chiếu khi cấu hình
+        # sai) — không log gì về secret đang cấu hình, tránh rò rỉ qua file log.
         logger.warning(
-            "SePay webhook auth failed: header=%s | received len=%d sha=%s | "
-            "configured len=%d sha=%s",
+            "SePay webhook auth failed: header=%s | received len=%d sha=%s",
             "X-Webhook-Secret" if x_webhook_secret else scheme,
             len(received_secret or ""),
             _fingerprint(received_secret or ""),
-            len(configured_secret),
-            _fingerprint(configured_secret),
         )
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
 

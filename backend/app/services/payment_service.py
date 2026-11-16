@@ -167,6 +167,14 @@ def process_sepay_webhook(db: Session, payload: dict) -> str:
     transfer_type = str(payload.get("transferType") or "in").strip().lower()
     if transfer_type != "in":
         return f"ignored: transferType={transfer_type} (not money in)"
+    # Đối chiếu tài khoản nhận: nếu đã cấu hình SEPAY_BANK_ACCOUNT và payload có
+    # `accountNumber` thì phải khớp — chặn trường hợp secret lộ rồi bị bơm giao
+    # dịch giả cho tài khoản khác. Payload không có trường này thì bỏ qua (một số
+    # cấu hình webhook của SePay không gửi kèm).
+    configured_account = get_settings().sepay_bank_account.strip()
+    account_number = str(payload.get("accountNumber") or "").strip()
+    if configured_account and account_number and account_number != configured_account:
+        return f"ignored: accountNumber {account_number} is not the receiving account"
     match = re.search(r"DV[A-Z0-9]{6}", content.upper())
     if match is None:
         return "ignored: no order code in content"
