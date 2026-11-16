@@ -243,6 +243,104 @@ class DocumentsRepositoryImpl implements DocumentsRepository {
     }
   }
 
+  // -- Lịch sử phiên bản -------------------------------------------------
+
+  @override
+  Future<List<DocumentVersionItem>> listVersions(String documentId) async {
+    try {
+      final Response<dynamic> res = await dio.get<dynamic>(
+        '/documents/$documentId/versions',
+      );
+      final List<dynamic> items =
+          (res.data as List<dynamic>? ?? const <dynamic>[]);
+      return items
+          .map(
+            (dynamic e) =>
+                DocumentVersionItemModel.fromJson(e as Map<String, dynamic>),
+          )
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Could not load the version history');
+    }
+  }
+
+  @override
+  Future<DocumentItem> uploadNewVersion({
+    required String documentId,
+    required String fileName,
+    required Uint8List bytes,
+    String label = '',
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    try {
+      final FormData form = FormData.fromMap(<String, dynamic>{
+        'label': label,
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: fileName,
+          contentType: _mediaType(fileName),
+        ),
+      });
+      final Response<dynamic> res = await dio.post<dynamic>(
+        '/documents/$documentId/versions',
+        data: form,
+        onSendProgress: onProgress,
+      );
+      return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Could not upload the new version');
+    }
+  }
+
+  @override
+  Future<DocumentItem> restoreVersion({
+    required String documentId,
+    required String versionId,
+  }) async {
+    try {
+      final Response<dynamic> res = await dio.post<dynamic>(
+        '/documents/$documentId/versions/$versionId/restore',
+      );
+      return DocumentItemModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Could not restore the version');
+    }
+  }
+
+  @override
+  Future<void> deleteVersion({
+    required String documentId,
+    required String versionId,
+  }) async {
+    try {
+      await dio.delete<dynamic>(
+        '/documents/$documentId/versions/$versionId',
+      );
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Could not delete the version');
+    }
+  }
+
+  @override
+  Future<VersionDiffResult> diffVersions({
+    required String documentId,
+    required String oldVersionId,
+    String? newVersionId,
+  }) async {
+    try {
+      final Response<dynamic> res = await dio.post<dynamic>(
+        '/documents/$documentId/versions/diff',
+        data: <String, dynamic>{
+          'old_version_id': oldVersionId,
+          'new_version_id': ?newVersionId,
+        },
+      );
+      return VersionDiffResultModel.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw mapDioException(e, fallback: 'Could not compare the versions');
+    }
+  }
+
   /// Map đuôi file → MIME để backend lưu đúng loại (quan trọng cho PDF).
   static DioMediaType _mediaType(String fileName) {
     final String ext = fileName.split('.').last.toLowerCase();

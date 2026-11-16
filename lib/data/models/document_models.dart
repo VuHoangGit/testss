@@ -48,3 +48,47 @@ class DocumentFolderModel extends DocumentFolder {
     );
   }
 }
+
+/// Model JSON cho một bản cũ trong lịch sử phiên bản.
+class DocumentVersionItemModel extends DocumentVersionItem {
+  const DocumentVersionItemModel({
+    required super.id,
+    required super.versionNumber,
+    required super.sizeBytes,
+    required super.uploadedAt,
+    super.pageCount,
+    super.label,
+  });
+
+  factory DocumentVersionItemModel.fromJson(Map<String, dynamic> json) {
+    return DocumentVersionItemModel(
+      id: json['id'] as String,
+      versionNumber: (json['version_number'] as num?)?.toInt() ?? 0,
+      sizeBytes: (json['size_bytes'] as num?)?.toInt() ?? 0,
+      pageCount: (json['page_count'] as num?)?.toInt(),
+      label: (json['label'] as String?) ?? '',
+      uploadedAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+/// Model JSON cho kết quả so sánh 2 phiên bản.
+class VersionDiffResultModel extends VersionDiffResult {
+  const VersionDiffResultModel({
+    required super.diffLines,
+    required super.addedCount,
+    required super.removedCount,
+    super.aiSummary,
+  });
+
+  factory VersionDiffResultModel.fromJson(Map<String, dynamic> json) {
+    return VersionDiffResultModel(
+      diffLines: (json['diff'] as List<dynamic>? ?? const <dynamic>[])
+          .map((dynamic e) => e as String)
+          .toList(growable: false),
+      addedCount: (json['added'] as num?)?.toInt() ?? 0,
+      removedCount: (json['removed'] as num?)?.toInt() ?? 0,
+      aiSummary: json['ai_summary'] as String?,
+    );
+  }
+}

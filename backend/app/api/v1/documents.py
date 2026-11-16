@@ -104,15 +104,30 @@ def _used_bytes(db: DatabaseSession, owner_id: uuid.UUID) -> int:
     return int(total or 0)
 
 
+def _archived_version_bytes(db: DatabaseSession, owner_id: uuid.UUID) -> int:
+    """Tổng dung lượng các bản cũ trong lịch sử phiên bản của user (byte)."""
+    from app.models.document_version import DocumentVersion  # import local tránh vòng
+
+    total = db.scalar(
+        select(func.coalesce(func.sum(DocumentVersion.size_bytes), 0))
+        .join(Document, DocumentVersion.document_id == Document.id)
+        .where(Document.owner_id == owner_id)
+    )
+    return int(total or 0)
+
+
 def _ensure_storage_quota(
     db: DatabaseSession, owner_id: uuid.UUID, incoming_bytes: int
 ) -> None:
-    """Chặn khi upload thêm sẽ vượt quota dung lượng của user → HTTP 413."""
+    """Chặn khi upload thêm sẽ vượt quota dung lượng của user → HTTP 413.
+
+    Tính cả các bản cũ trong lịch sử phiên bản — không cho lịch sử lách quota.
+    """
     quota_mb = get_settings().user_storage_quota_mb
     if quota_mb <= 0:
         return
     quota_bytes = quota_mb * 1024 * 1024
-    used = _used_bytes(db, owner_id)
+    used = _used_bytes(db, owner_id) + _archived_version_bytes(db, owner_id)
     if used + incoming_bytes > quota_bytes:
         raise HTTPException(
             status_code=413,
@@ -313,6 +328,10 @@ def delete_document(
 ) -> dict[str, str]:
     user = current
     doc = _get_owned_document(db, document_id, user.id)
+    # Xóa file các bản cũ TRƯỚC khi cascade xóa row — unlink(missing_ok=True)
+    # nên trùng storage_key (sau khi restore) cũng an toàn.
+    for version in list(doc.versions):
+        storage_service.delete_document_file(version.storage_key)
     storage_service.delete_document_file(doc.storage_key)
     db.delete(doc)
     db.commit()

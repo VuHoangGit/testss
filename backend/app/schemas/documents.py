@@ -58,3 +58,31 @@ class ProtectRequest(BaseModel):
 
 class UnprotectRequest(ProtectRequest):
     pass
+
+
+class DocumentVersionOut(BaseModel):
+    """Một bản cũ trong lịch sử phiên bản của tài liệu."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    document_id: uuid.UUID
+    version_number: int
+    size_bytes: int
+    page_count: int | None = None
+    label: str
+    created_at: datetime
+
+
+class VersionDiffRequest(BaseModel):
+    """Chọn 2 phiên bản để so sánh: một bản cũ + bản hiện tại hoặc hai bản cũ."""
+
+    old_version_id: uuid.UUID
+    new_version_id: uuid.UUID | None = None  # None = so với bản hiện tại
+
+
+class VersionDiffResult(BaseModel):
+    diff: list[str]
+    added: int
+    removed: int
+    ai_summary: str | None = None

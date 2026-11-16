@@ -96,3 +96,44 @@ class DocumentFolder {
   final String name;
   final int documentCount;
 }
+
+/// Một bản cũ trong lịch sử phiên bản của tài liệu.
+class DocumentVersionItem {
+  const DocumentVersionItem({
+    required this.id,
+    required this.versionNumber,
+    required this.sizeBytes,
+    required this.uploadedAt,
+    this.pageCount,
+    this.label = '',
+  });
+
+  final String id;
+
+  /// 1 = bản gần nhất bị thay thế, 2 = cũ hơn...
+  final int versionNumber;
+  final int sizeBytes;
+
+  /// Ghi chú người dùng nhập khi upload bản mới (vd "sau khi khách sửa điều 4").
+  final String label;
+  final int? pageCount;
+  final DateTime uploadedAt;
+}
+
+/// Kết quả so sánh 2 phiên bản: diff dòng + thống kê + tóm tắt AI.
+class VersionDiffResult {
+  const VersionDiffResult({
+    required this.diffLines,
+    required this.addedCount,
+    required this.removedCount,
+    this.aiSummary,
+  });
+
+  final List<String> diffLines;
+  final int addedCount;
+  final int removedCount;
+
+  /// Tóm tắt thay đổi bằng AI (tiếng Việt); null = 2 bản giống nhau.
+  final String? aiSummary;
+}
+

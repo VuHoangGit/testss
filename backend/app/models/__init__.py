@@ -2,6 +2,7 @@
 
 from app.models.conversation import AiConversation
 from app.models.document import Document
+from app.models.document_version import DocumentVersion
 from app.models.folder import Folder
 from app.models.message import AiMessage
 from app.models.payment import PaymentOrder, PricingPackage
@@ -12,6 +13,7 @@ __all__ = [
     "User",
     "Folder",
     "Document",
+    "DocumentVersion",
     "Permission",
     "AiConversation",
     "AiMessage",

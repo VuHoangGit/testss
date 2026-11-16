@@ -72,4 +72,39 @@ abstract interface class DocumentsRepository {
     String documentId, {
     required String password,
   });
+
+  // -- Lịch sử phiên bản -------------------------------------------------
+
+  /// Danh sách bản cũ của tài liệu (mới nhất trước).
+  Future<List<DocumentVersionItem>> listVersions(String documentId);
+
+  /// Upload bản mới: bản hiện tại được giữ lại thành phiên bản 1.
+  Future<DocumentItem> uploadNewVersion({
+    required String documentId,
+    required String fileName,
+    required Uint8List bytes,
+    String label = '',
+    void Function(int sent, int total)? onProgress,
+  });
+
+  /// Khôi phục một bản cũ thành bản hiện tại (bản hiện tại không mất).
+  Future<DocumentItem> restoreVersion({
+    required String documentId,
+    required String versionId,
+  });
+
+  /// Xóa một bản cũ khỏi lịch sử (file + row).
+  Future<void> deleteVersion({
+    required String documentId,
+    required String versionId,
+  });
+
+  /// So sánh 2 bản: [newVersionId] null = so với bản hiện tại.
+  ///
+  /// Tốn 1 lượt AI (trừ credit) trừ khi 2 bản giống hệt nhau.
+  Future<VersionDiffResult> diffVersions({
+    required String documentId,
+    required String oldVersionId,
+    String? newVersionId,
+  });
 }

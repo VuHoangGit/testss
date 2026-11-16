@@ -15,6 +15,7 @@ from app.db.base import Base, UTCDateTime
 
 if TYPE_CHECKING:
     from app.models.conversation import AiConversation
+    from app.models.document_version import DocumentVersion
 
 
 class Document(Base):
@@ -51,4 +52,11 @@ class Document(Base):
     # chạy được cả khi SQLite không bật FK pragma)
     ai_conversations: Mapped[list["AiConversation"]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
+    )
+    # Lịch sử phiên bản (upload bản mới không mất bản cũ) — cascade xóa luôn
+    # các bản cũ khi tài liệu bị xóa.
+    versions: Mapped[list["DocumentVersion"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentVersion.version_number",
     )

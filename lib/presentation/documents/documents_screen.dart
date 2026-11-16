@@ -13,6 +13,7 @@ import '../ai/ai_providers.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
 import 'upload_flow.dart';
+import 'version_history_dialog.dart';
 import 'viewer_opener.dart';
 
 class DocumentsScreen extends ConsumerStatefulWidget {
@@ -242,6 +243,20 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           .mergeSelected(name);
       _showSnack('Created "$newName"');
     });
+  }
+
+  /// Mở dialog lịch sử phiên bản; có thay đổi thì reload lại danh sách.
+  Future<void> _openVersionHistory(DocumentItem doc) async {
+    final bool changed = await showVersionHistoryDialog(ref, context, doc);
+    if (changed && mounted) {
+      await _guard(
+        () => ref
+            .read(documentsControllerProvider.notifier)
+            .selectFolder(
+              ref.read(documentsControllerProvider).value?.selectedFolderId,
+            ),
+      );
+    }
   }
 
   Future<void> _split(DocumentItem doc) async {
@@ -596,6 +611,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             onSplit: () => _split(doc),
             onProtect: () => _protect(doc, removing: false),
             onUnprotect: () => _protect(doc, removing: true),
+            onVersions: () => _openVersionHistory(doc),
             onDelete: () => _deleteDocument(doc),
             onOpenViewer: () => _openViewer(doc),
           );
@@ -700,6 +716,7 @@ class _DocumentTile extends StatelessWidget {
     required this.onSplit,
     required this.onProtect,
     required this.onUnprotect,
+    required this.onVersions,
     required this.onDelete,
     required this.onOpenViewer,
   });
@@ -714,6 +731,7 @@ class _DocumentTile extends StatelessWidget {
   final VoidCallback onSplit;
   final VoidCallback onProtect;
   final VoidCallback onUnprotect;
+  final VoidCallback onVersions;
   final VoidCallback onDelete;
   final VoidCallback onOpenViewer;
 
@@ -819,6 +837,8 @@ class _DocumentTile extends StatelessWidget {
                           onProtect();
                         case 'unprotect':
                           onUnprotect();
+                        case 'versions':
+                          onVersions();
                         case 'delete':
                           onDelete();
                       }
@@ -849,6 +869,10 @@ class _DocumentTile extends StatelessWidget {
                       const PopupMenuItem<String>(
                         value: 'unprotect',
                         child: Text('Remove password…'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'versions',
+                        child: Text('Version history…'),
                       ),
                       const PopupMenuDivider(),
                       PopupMenuItem<String>(

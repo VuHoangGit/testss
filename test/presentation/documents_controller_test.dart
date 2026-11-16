@@ -104,6 +104,38 @@ class _FakeRepo implements DocumentsRepository {
     String documentId, {
     required String ranges,
   }) => throw UnimplementedError();
+
+  @override
+  Future<List<DocumentVersionItem>> listVersions(String documentId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<DocumentItem> uploadNewVersion({
+    required String documentId,
+    required String fileName,
+    required Uint8List bytes,
+    String label = '',
+    void Function(int sent, int total)? onProgress,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<DocumentItem> restoreVersion({
+    required String documentId,
+    required String versionId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteVersion({
+    required String documentId,
+    required String versionId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<VersionDiffResult> diffVersions({
+    required String documentId,
+    required String oldVersionId,
+    String? newVersionId,
+  }) => throw UnimplementedError();
 }
 
 DocumentItem _doc(String id, {bool favorite = false}) => DocumentItem(

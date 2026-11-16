@@ -90,6 +90,38 @@ class _FakeDocumentsRepository implements DocumentsRepository {
     String documentId, {
     required String ranges,
   }) => throw UnimplementedError();
+
+  @override
+  Future<List<DocumentVersionItem>> listVersions(String documentId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<DocumentItem> uploadNewVersion({
+    required String documentId,
+    required String fileName,
+    required Uint8List bytes,
+    String label = '',
+    void Function(int sent, int total)? onProgress,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<DocumentItem> restoreVersion({
+    required String documentId,
+    required String versionId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> deleteVersion({
+    required String documentId,
+    required String versionId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<VersionDiffResult> diffVersions({
+    required String documentId,
+    required String oldVersionId,
+    String? newVersionId,
+  }) => throw UnimplementedError();
 }
 
 Future<void> _pump(WidgetTester tester) async {
@@ -115,7 +147,8 @@ void main() {
     expect(find.text('New folder'), findsOneWidget);
     expect(find.textContaining('Hợp đồng'), findsWidgets);
     expect(find.text('hop-dong.pdf'), findsOneWidget);
-    expect(find.textContaining('3 trang'), findsOneWidget);
+    // UI đã đổi sang tiếng Anh (commit eaeeed7) — card hiện "3 pages · 2 KB"
+    expect(find.textContaining('3 pages'), findsOneWidget);
   });
 
   testWidgets('bật chế độ chọn để gộp hiện nút Gộp', (
