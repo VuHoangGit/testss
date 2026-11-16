@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/capture/photo_capture.dart';
 import '../../data/repositories/ai_chat_repository_impl.dart';
 import '../../data/repositories/ai_repository_impl.dart';
 import '../../domain/entities/chat_entities.dart';
@@ -9,6 +10,12 @@ import '../providers.dart';
 
 final Provider<AiRepository> aiRepositoryProvider = Provider<AiRepository>(
   (Ref ref) => AiRepositoryImpl(dio: ref.watch(apiDioProvider)),
+);
+
+/// Nguồn ảnh cho OCR (camera điện thoại / thư viện ảnh). Widget test override
+/// bằng bản giả vì plugin camera không chạy được trong môi trường test.
+final Provider<PhotoCapture> photoCaptureProvider = Provider<PhotoCapture>(
+  (Ref ref) => const ImagePickerPhotoCapture(),
 );
 
 final Provider<AiChatRepository> aiChatRepositoryProvider =

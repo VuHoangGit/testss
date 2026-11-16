@@ -211,22 +211,95 @@ def test_render_library_error_is_reported(monkeypatch, no_structured_ai):
         ocr_service.ocr_document_bytes(b"%PDF", "application/pdf")
 
 
-def test_image_document_is_one_vision_page(monkeypatch, no_structured_ai):
-    captured: list[str] = []
+def _photo_bytes(width: int = 1200, height: int = 900, *, exif_orientation: int = 0) -> bytes:
+    """Ảnh JPEG giả lập ảnh chụp điện thoại (có nền trắng + vài dòng chữ)."""
+    from PIL import Image, ImageDraw
 
-    def fake_vision(png, media_type, prompt):
-        captured.append(media_type)
+    image = Image.new("RGB", (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.text((40, 40), "CONG HOA XA HOI CHU NGHIA VIET NAM", fill=(0, 0, 0))
+    draw.text((40, 120), "So hop dong: 01/HD-2025", fill=(0, 0, 0))
+    buffer = io.BytesIO()
+    if exif_orientation:
+        exif = Image.Exif()
+        exif[274] = exif_orientation  # Orientation
+        image.save(buffer, format="JPEG", quality=90, exif=exif.tobytes())
+    else:
+        image.save(buffer, format="JPEG", quality=90)
+    return buffer.getvalue()
+
+
+def _image_size(payload: bytes) -> tuple[int, int]:
+    from PIL import Image
+
+    with Image.open(io.BytesIO(payload)) as image:
+        return image.size
+
+
+def test_image_document_is_one_vision_page(monkeypatch, no_structured_ai):
+    captured: list[tuple[int, str]] = []
+
+    def fake_vision(payload, media_type, prompt):
+        captured.append((len(payload), media_type))
         return "Nội dung ảnh"
 
     monkeypatch.setattr(ocr_service, "_read_page_with_vision", fake_vision)
 
-    outcome = ocr_service.ocr_document_bytes(b"\x89PNG", "image/jpg")
+    outcome = ocr_service.ocr_document_bytes(_photo_bytes(), "image/jpg")
 
-    assert captured == ["image/jpeg"]  # chuẩn hoá image/jpg → image/jpeg
+    # Ảnh luôn được chuẩn hoá sang JPEG trước khi gửi model
+    assert [media_type for _, media_type in captured] == ["image/jpeg"]
     assert len(outcome.pages) == 1
     assert outcome.pages[0].text == "Nội dung ảnh"
     # 1 trang → không chèn mốc trang, bản xuất Word sạch
     assert outcome.text == "Nội dung ảnh"
+
+
+def test_phone_photo_is_downscaled_before_vision(monkeypatch, no_structured_ai):
+    """Ảnh 12 MP từ camera phải thu về cạnh dài ≤ 2000px, nén JPEG."""
+    sent: list[bytes] = []
+    monkeypatch.setattr(
+        ocr_service,
+        "_read_page_with_vision",
+        lambda payload, media_type, prompt: sent.append(payload) or "Chữ trên trang",
+    )
+
+    big = _photo_bytes(4000, 3000)
+    ocr_service.ocr_document_bytes(big, "image/jpeg", "scan.jpg")
+
+    assert len(sent) == 1
+    width, height = _image_size(sent[0])
+    assert max(width, height) <= ocr_service._MAX_LONG_SIDE
+    # Giữ đúng tỉ lệ 4:3 của ảnh gốc
+    assert (width, height) == (ocr_service._MAX_LONG_SIDE, ocr_service._MAX_LONG_SIDE * 3 // 4)
+    # Nén mạnh hơn nhiều so với ảnh gốc 4000×3000
+    assert len(sent[0]) < len(big)
+
+
+def test_photo_exif_orientation_is_applied(monkeypatch, no_structured_ai):
+    """Chụp dọc nhưng máy ghi EXIF orientation 6 → model phải nhận ảnh dọc."""
+    sent: list[bytes] = []
+    monkeypatch.setattr(
+        ocr_service,
+        "_read_page_with_vision",
+        lambda payload, media_type, prompt: sent.append(payload) or "Chữ trên trang",
+    )
+
+    # File 400×200 (ngang) + EXIF orientation 6 = cần xoay 90° → hiển thị 200×400
+    ocr_service.ocr_document_bytes(
+        _photo_bytes(400, 200, exif_orientation=6), "image/jpeg", "doc.jpg"
+    )
+
+    assert _image_size(sent[0]) == (200, 400)
+
+
+def test_unreadable_image_reports_friendly_error():
+    with pytest.raises(ai_service.AIServiceError) as error:
+        ocr_service.ocr_document_bytes(b"not-an-image", "image/jpeg", "scan.jpg")
+
+    message = str(error.value)
+    assert "scan.jpg" in message
+    assert "not a readable image" in message
 
 
 def test_unsupported_mime_type_raises_friendly_error():

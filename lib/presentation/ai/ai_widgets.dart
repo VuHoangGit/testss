@@ -41,8 +41,14 @@ class AiDocumentPicker extends StatelessWidget {
         onChanged: null,
       );
     }
+    // Giá trị đang chọn có thể không nằm trong danh sách (tài liệu vừa tạo
+    // nhưng khung nhìn Files đang lọc Recent/Favorites) — truyền thẳng vào
+    // DropdownButtonFormField sẽ assert. Không có trong danh sách thì bỏ chọn.
+    final bool selectedIsListed = items.any(
+      (DocumentItem document) => document.id == value,
+    );
     return DropdownButtonFormField<String>(
-      initialValue: value,
+      initialValue: selectedIsListed ? value : null,
       decoration: InputDecoration(
         labelText: labelText,
         prefixIcon: Icon(prefixIcon),

@@ -10,7 +10,7 @@ hoặc đánh giá chất lượng OCR.
 |---|---|---|
 | PDF có lớp text (PDF sinh từ Word, xuất từ hệ thống…) | `pypdfium2` trích thẳng, không gọi AI | 0 |
 | PDF scan (trang không có lớp text) | `pypdfium2` render ảnh 200 DPI → model đọc | 1/trang |
-| Ảnh chụp / ảnh scan (png/jpeg/webp/gif) | model đọc trực tiếp | 1 |
+| Ảnh chụp / ảnh scan (png/jpeg/webp/gif) | chuẩn hoá ảnh (EXIF, cạnh dài ≤ 2000px, JPEG) rồi model đọc | 1 |
 | Trích xuất trường dữ liệu (cuối mọi lượt OCR) | 1 lượt gọi trên văn bản đã có | 1 |
 
 Lý do: LLM giỏi *hiểu bố cục* nhưng yếu hơn OCR chuyên dụng ở bảng dày đặc,
@@ -238,3 +238,44 @@ Giới hạn đã biết (đo trên Proposal.pdf 10 trang và một CV 2 cột):
 - Tiêu đề cùng cỡ chữ thân nhưng in đậm, hoặc bảng có chữ to, vẫn bị đoán sai cấp.
 
 Test: `tests/test_docx_service.py`, `tests/test_pdf_markdown_extraction.py`.
+
+## 10. Ảnh chụp từ điện thoại — luồng quét
+
+Người dùng cầm điện thoại chụp trang giấy thay vì scan bằng máy scan. Luồng
+này dùng lại toàn bộ đường OCR ảnh ở §1, không thêm endpoint:
+
+```
+[Điện thoại]  AI Center → OCR → "Scan with camera"
+      │  image_picker (camera sau, cạnh dài ≤ 2400px, JPEG q88)
+      ▼
+POST /api/v1/documents   (multipart, đuôi .jpg)   → tài liệu mới trong kho
+      ▼
+POST /api/v1/ai/ocr/{document_id}  (1 lượt, 50 credit)
+      ▼
+[Điện thoại]  text + trường dữ liệu + cảnh báo hậu kiểm
+```
+
+Quyết định:
+
+- **Ảnh là tài liệu bình thường**, không phải đường riêng: chụp xong là thấy
+  trong tab Files, tải về / xuất Word / đưa vào AI Chat được như file PDF.
+- **Thu nhỏ ngay trên máy** (`maxWidth/maxHeight 2400`, `imageQuality 88`): ảnh
+  camera 12 MP nặng 4–8 MB, upload qua Wi-Fi LAN chậm mà OCR chỉ cần ~2000px.
+- **Chuẩn hoá lại ở server** (`_prepare_photo_image`): `ImageOps.exif_transpose`
+  (máy xoay ngang khi chụp dọc → không xử lý thì model nhận trang nằm ngang và
+  đọc sai thứ tự dòng), thu cạnh dài về `_MAX_LONG_SIDE` = 2000px, nén JPEG
+  quality 90 → 60 nếu vẫn > 4 MB. File không mở được (HEIC, file hỏng) → lỗi
+  tiếng Anh kèm tên file, không gọi AI (không mất credit).
+- **Mỗi ảnh = 1 trang = 1 tài liệu.** Chụp nhiều trang thì mỗi trang một tài
+  liệu; gộp nhiều ảnh vào một tài liệu là việc của giai đoạn sau (cần đổi
+  schema: một tài liệu nhiều file).
+- **Web trên điện thoại**: `image_picker` tạo `<input type="file" accept="image/*"
+  capture="environment">` nên Chrome Android mở thẳng camera; không cần HTTPS
+  (chỉ `getUserMedia` mới cần secure context). Desktop web rơi về hộp chọn file.
+- Màn hình OCR nhận cả **PDF lẫn ảnh** trong danh sách chọn (`AiDocumentPicker`
+  lọc `isPdf || isImage`); ảnh vừa chụp được ghim lên đầu danh sách vì khung
+  nhìn Files có thể đang lọc Recent/Favorites.
+- Test: `tests/test_ocr_service.py` (thu nhỏ ảnh 12 MP, xoay theo EXIF, file
+  không đọc được) · `test/core/photo_capture_test.dart` (đặt tên file theo
+  đuôi backend chấp nhận) · `test/widget/ai_ocr_scan_test.dart` (chụp → upload
+  → OCR đúng tài liệu; huỷ camera không upload).

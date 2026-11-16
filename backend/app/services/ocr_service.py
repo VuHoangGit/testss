@@ -385,17 +385,76 @@ def _ocr_pdf(data: bytes, options: OcrOptions) -> tuple[list[OcrPage], list[str]
     return pages, warnings
 
 
+def _prepare_photo_image(data: bytes) -> tuple[bytes, str]:
+    """Chuẩn hoá ảnh chụp điện thoại / ảnh scan trước khi gửi model đọc.
+
+    Ảnh từ camera điện thoại thường 3–12 MP, vài MB, và hay kèm EXIF
+    orientation (máy xoay ngang khi người dùng chụp dọc). Gửi nguyên file cho
+    model thì tốn token, dễ vượt giới hạn request, và chữ có thể nằm ngang.
+    Ở đây: xoay theo EXIF → thu cạnh dài về ≤ [_MAX_LONG_SIDE] → nén JPEG.
+
+    Ném [ai_service.AIServiceError] khi file không phải ảnh đọc được.
+    """
+    try:
+        from PIL import Image, ImageOps
+    except ImportError as exc:  # thiếu package native
+        raise ai_service.AIServiceError(
+            "The server is missing the image library (Pillow). "
+            "Run: pip install -r requirements.txt"
+        ) from exc
+
+    try:
+        image = Image.open(io.BytesIO(data))
+        image.load()  # đọc hết frame ngay — ảnh hỏng/thiếu dữ liệu lỗi ở đây
+    except Exception as exc:  # noqa: BLE001 — Pillow ném nhiều loại lỗi khác nhau
+        raise ai_service.AIServiceError(
+            "The file is not a readable image (supported: JPEG, PNG, GIF, WEBP)."
+        ) from exc
+
+    try:
+        # EXIF orientation — không xử lý thì trang chụp dọc tới model nằm ngang.
+        image = ImageOps.exif_transpose(image)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        if max(image.size) > _MAX_LONG_SIDE:
+            image.thumbnail((_MAX_LONG_SIDE, _MAX_LONG_SIDE), Image.Resampling.LANCZOS)
+        return _encode_photo(image)
+    finally:
+        image.close()
+
+
+def _encode_photo(image) -> tuple[bytes, str]:
+    """Nén ảnh chụp sang JPEG — PNG của ảnh điện thoại nặng gấp 5–10 lần.
+
+    Hạ dần quality nếu vẫn vượt giới hạn request; ảnh chụp chữ vẫn đọc tốt ở
+    quality 70, còn hơn để request bị từ chối.
+    """
+    payload = b""
+    for quality in (90, 80, 70, 60):
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=quality, optimize=True)
+        payload = buffer.getvalue()
+        if len(payload) <= _MAX_IMAGE_BYTES:
+            break
+    return payload, "image/jpeg"
+
+
 def _ocr_image(
     data: bytes, mime_type: str, options: OcrOptions, *, name: str = ""
 ) -> tuple[list[OcrPage], list[str]]:
-    """OCR một ảnh đơn (ảnh chụp / ảnh scan) — coi như tài liệu 1 trang."""
-    media_type = "image/jpeg" if mime_type == "image/jpg" else mime_type
+    """OCR một ảnh đơn (ảnh chụp bằng điện thoại / ảnh scan) — 1 trang.
+
+    `mime_type` do client khai theo đuôi file, nhưng nội dung mới là thứ quyết
+    định: ảnh luôn được chuẩn hoá lại (xem [_prepare_photo_image]) trước khi
+    gửi model, nên MIME gửi đi luôn do server chọn.
+    """
+    label = name or "the document"
     try:
+        prepared, media_type = _prepare_photo_image(data)
         text = _read_page_with_vision(
-            data, media_type, build_page_prompt(1, 1, options)
+            prepared, media_type, build_page_prompt(1, 1, options)
         )
     except ai_service.AIServiceError as exc:
-        label = name or "tài liệu"
         raise ai_service.AIServiceError(f"Could not read the image '{label}': {exc}") from exc
     return [OcrPage(page=1, text=text or EMPTY_PAGE_MARKER, source="vision")], []
 

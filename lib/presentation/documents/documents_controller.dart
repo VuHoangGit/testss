@@ -219,6 +219,26 @@ class DocumentsController extends AsyncNotifier<DocumentsState> {
     return file.name;
   }
 
+  /// Upload một ảnh vừa chụp/chọn thành tài liệu mới, trả về tài liệu server
+  /// vừa tạo để màn hình OCR chọn đúng nó ngay (ảnh cũng hiện trong tab Files).
+  ///
+  /// Ảnh vào thư mục đang mở (`selectedFolderId`, null = kho chung) — giống
+  /// thao tác upload thường.
+  Future<DocumentItem> uploadPhoto({
+    required String fileName,
+    required Uint8List bytes,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final DocumentItem document = await _repo.uploadDocument(
+      fileName: fileName,
+      bytes: bytes,
+      folderId: state.value?.selectedFolderId,
+      onProgress: onProgress,
+    );
+    await _reload();
+    return document;
+  }
+
   /// Tải document và lưu qua FileSaver. Trả về tên/đường dẫn đã lưu,
   /// null nếu người dùng hủy.
   Future<String?> downloadDocument(DocumentItem doc) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/capture/photo_capture.dart';
 import '../../core/files/file_saver.dart';
 import '../../domain/entities/document_entities.dart';
 import '../../domain/repositories/ai_repository.dart';
@@ -18,6 +19,14 @@ class AiOcrScreen extends ConsumerStatefulWidget {
 
 class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
   bool _busy = false;
+
+  /// Ảnh vừa chụp — hiện ngay trên màn hình để người dùng thấy đúng trang
+  /// mình vừa chụp trước khi đọc kết quả OCR.
+  Uint8List? _photoBytes;
+
+  /// Tài liệu tạo từ ảnh vừa chụp. Giữ riêng vì danh sách tài liệu có thể
+  /// đang lọc (Favorites/Recent) nên ảnh mới chưa chắc nằm trong đó.
+  DocumentItem? _scannedDocument;
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
@@ -37,6 +46,31 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
   Future<void> _runOcr(String documentId) => _run(() async {
     final AiRepository ai = ref.read(aiRepositoryProvider);
     final OcrResult result = await ai.ocr(documentId);
+    ref.read(lastAiResultsProvider.notifier).setOcrResult(result);
+  });
+
+  /// Chụp ảnh / chọn ảnh → lưu vào kho → chạy OCR ngay.
+  ///
+  /// Ảnh trở thành một tài liệu bình thường nên vẫn xem lại, tải về, xuất Word
+  /// được như tài liệu PDF.
+  Future<void> _scanPhoto({
+    required Future<CapturedPhoto?> Function(PhotoCapture capture) pick,
+  }) => _run(() async {
+    final CapturedPhoto? photo = await pick(ref.read(photoCaptureProvider));
+    if (photo == null) return; // người dùng huỷ camera/hộp chọn ảnh
+    if (!mounted) return;
+
+    setState(() => _photoBytes = photo.bytes);
+    final DocumentItem document = await ref
+        .read(documentsControllerProvider.notifier)
+        .uploadPhoto(fileName: photo.fileName, bytes: photo.bytes);
+    if (!mounted) return;
+    setState(() => _scannedDocument = document);
+    ref.read(aiDocumentIdProvider.notifier).select(document.id);
+
+    final OcrResult result = await ref
+        .read(aiRepositoryProvider)
+        .ocr(document.id);
     ref.read(lastAiResultsProvider.notifier).setOcrResult(result);
   });
 
@@ -61,9 +95,17 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<DocumentItem> documents =
+    final List<DocumentItem> loaded =
         ref.watch(documentsControllerProvider).value?.documents ??
         const <DocumentItem>[];
+    final DocumentItem? scanned = _scannedDocument;
+    // Ảnh vừa chụp đứng đầu danh sách chọn — kể cả khi khung nhìn Files đang
+    // lọc Recent/Favorites và ảnh chưa lọt vào danh sách đã tải.
+    final List<DocumentItem> documents = <DocumentItem>[
+      ?scanned,
+      for (final DocumentItem document in loaded)
+        if (document.id != scanned?.id) document,
+    ];
     final String? documentId = ref.watch(aiDocumentIdProvider);
     final LastAiResults last = ref.watch(lastAiResultsProvider);
     final bool hasResult = last.ocrText != null;
@@ -73,13 +115,30 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
       children: <Widget>[
         const AiPageHeader(
           title: 'OCR & Export to Word',
-          subtitle: 'Extract content and data fields from a PDF.',
+          subtitle: 'Scan a page with your phone camera, or pick a PDF.',
           icon: Icons.document_scanner_outlined,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
+        _ScanPhotoCard(
+          busy: _busy,
+          photoBytes: _photoBytes,
+          onTakePhoto: () => _scanPhoto(
+            pick: (PhotoCapture capture) => capture.takePhoto(),
+          ),
+          onPickPhoto: () => _scanPhoto(
+            pick: (PhotoCapture capture) => capture.pickFromGallery(),
+          ),
+        ),
+        const SizedBox(height: 20),
         AiDocumentPicker(
           documents: documents,
           value: documentId,
+          // OCR nhận cả PDF (có lớp text hoặc trang scan) lẫn ảnh chụp.
+          filter: (DocumentItem document) =>
+              document.isPdf || document.isImage,
+          labelText: 'PDF or photo',
+          prefixIcon: Icons.description_outlined,
+          emptyHint: 'No PDF or photo yet — scan a page to start',
           onChanged: _busy
               ? null
               : (String? value) =>
@@ -131,6 +190,110 @@ class _AiOcrScreenState extends ConsumerState<AiOcrScreen> {
   }
 }
 
+/// Thẻ "quét bằng điện thoại": mở camera, hoặc chọn ảnh có sẵn.
+///
+/// Đây là đường vào chính cho người dùng cầm điện thoại: chụp trang giấy →
+/// ảnh được lưu vào kho và OCR ngay, không cần qua máy tính.
+class _ScanPhotoCard extends StatelessWidget {
+  const _ScanPhotoCard({
+    required this.busy,
+    required this.photoBytes,
+    required this.onTakePhoto,
+    required this.onPickPhoto,
+  });
+
+  final bool busy;
+  final Uint8List? photoBytes;
+  final VoidCallback onTakePhoto;
+  final VoidCallback onPickPhoto;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: colors.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.photo_camera_outlined,
+                    color: colors.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Scan a paper document',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Photograph the page — the photo is saved in My Files '
+                        'and the text is read right away.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (photoBytes != null) ...<Widget>[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  photoBytes!,
+                  height: 180,
+                  fit: BoxFit.contain,
+                  alignment: Alignment.centerLeft,
+                  // Ảnh hỏng chỉ hiện khung trống, không làm hỏng màn hình
+                  errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: busy ? null : onTakePhoto,
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.photo_camera),
+                  label: const Text('Scan with camera'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onPickPhoto,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Use a photo'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Trạng thái 1 — chưa chạy OCR: hướng dẫn thao tác.
 class _OcrInitialCard extends StatelessWidget {
   @override
@@ -161,7 +324,8 @@ class _OcrInitialCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Select a PDF and tap "Run OCR" to extract its text and fields.',
+              'Scan a page with your phone camera (or pick a PDF), then tap '
+              '"Run OCR" to extract its text and fields.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodySmall,
             ),
@@ -189,7 +353,7 @@ class _ProcessingCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'This usually takes a few seconds.',
+              'A scanned page usually takes 10–30 seconds.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

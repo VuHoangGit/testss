@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Chụp ảnh trang tài liệu để OCR thành văn bản.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chọn ảnh tài liệu có sẵn trong máy để OCR thành văn bản.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
