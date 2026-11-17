@@ -6,6 +6,7 @@ Chạy qua endpoint tương thích Anthropic (vd GLM của z.ai) — cấu hình
 """
 
 import io
+import logging
 import re
 from dataclasses import dataclass
 
@@ -59,8 +60,200 @@ class AIServiceError(Exception):
     """A configured AI operation could not be completed."""
 
 
+# Ghi log nguyên nhân thật (timeout/DNS/5xx gateway) — câu lỗi trả client có
+# thể bị rút gọn nhưng log phải đủ để chẩn đoán không cần tái hiện lỗi.
+logger = logging.getLogger(__name__)
+
+
+def _messages_url(base_url: str) -> str:
+    """URL endpoint /v1/messages, tránh lặp `/v1` khi base_url đã có sẵn đuôi đó.
+
+    Anthropic gốc: base `https://api.anthropic.com` → nối `/v1/messages`.
+    Endpoint tương thích của Google (`…/apps/anthropic-api/v1`) đã kết thúc
+    bằng `/v1` → chỉ nối `/messages`, kẻo ra `/v1/v1/messages` (404).
+    """
+    base = base_url.rstrip("/")
+    suffix = "/messages" if base.endswith("/v1") else "/v1/messages"
+    return f"{base}{suffix}"
+
+
+def _auth_headers(settings) -> dict[str, str]:
+    """Header xác thực theo nhà cung cấp.
+
+    Google (token dạng `AQ.`) chỉ nhận `x-api-key` — gửi thêm
+    `Authorization: Bearer` bằng API key sẽ bị từ chối 401 (Google chỉ chấp
+    nhận Bearer với OAuth token). Gateway litellm/new-api (vd dev-gw.vtvlive.vn)
+    thì đọc Bearer, nên gửi cả hai như trước.
+    """
+    if settings.anthropic_auth_token.startswith("AQ."):
+        return {
+            "x-api-key": settings.anthropic_auth_token,
+            "anthropic-version": "2023-06-01",
+        }
+    return {
+        "x-api-key": settings.anthropic_auth_token,
+        "Authorization": f"Bearer {settings.anthropic_auth_token}",
+        "anthropic-version": "2023-06-01",
+    }
+
+
+def _is_google_settings(settings) -> bool:
+    """True khi cấu hình trỏ sang Google (Gemini API) thay vì Anthropic/gateway.
+
+    Nhận biết theo tiền tố `AQ.` của key AI Studio — endpoint tương thích
+    Anthropic của Google không cấp cho key loại này, nên phải gọi API gốc
+    `generateContent` (xem [_post_google]).
+    """
+    return settings.anthropic_auth_token.startswith("AQ.")
+
+
+def _google_model_name(model: str) -> str:
+    """Tên model Gemini dùng cho URL `models/{model}:generateContent`.
+
+    Model lỗi thời bị Google đóng với người dùng mới (404 "no longer available
+    to new users") nên luôn đổi về họ 3.8. Key AI Studio (AQ.*) hiện chỉ được
+    cấp phép `gemini-3.8-flash` — không có bản "pro" cho key này — nên mọi
+    tên claude/ten khác đều chuyển về flash. Nếu .env đã đặt tên `gemini-*`
+    thì giữ nguyên để người dùng tự chọn phiên bản.
+    """
+    lowered = model.lower()
+    if lowered.startswith("gemini-"):
+        return model
+    return "gemini-3.8-flash"
+
+
+def _tools_for_gemini(tools: object) -> list[dict[str, object]]:
+    """Dịch khai báo tools Anthropic (voice command) → functionDeclarations.
+
+    Anthropic: `{"name", "description", "input_schema"}`; Gemini muốn
+    `parameters` thay cho `input_schema` — các trường còn lại giữ nguyên.
+    """
+    declarations: list[dict[str, object]] = []
+    for tool in tools or []:  # type: ignore[union-attr]
+        if not isinstance(tool, dict):
+            continue
+        declarations.append({
+            "name": tool.get("name"),
+            "description": tool.get("description"),
+            "parameters": tool.get("input_schema") or {"type": "object"},
+        })
+    return declarations
+
+
+def _to_google_payload(payload: dict[str, object]) -> dict[str, object]:
+    """Dịch payload Anthropic Messages → Gemini generateContent.
+
+    Chỉ dịch những gì DocuVault gửi: system, messages (text + image base64),
+    tools (function declarations cho voice command), max_tokens, temperature.
+    `temperature=0` (OCR cần chính xác) tắt luôn thinking của Gemini để trả
+    lời nhanh — suy luận không giúp chép tài liệu đúng từng con số.
+    """
+    system = payload.get("system")
+    contents: list[dict[str, object]] = []
+    for message in payload.get("messages") or []:
+        role = "model" if message.get("role") == "assistant" else "user"
+        content = message.get("content")
+        parts: list[dict[str, object]] = []
+        if isinstance(content, str):
+            parts.append({"text": content})
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    parts.append({"text": str(block.get("text") or "")})
+                elif block.get("type") == "image":
+                    source = block.get("source") or {}
+                    parts.append({
+                        "inlineData": {
+                            "mimeType": source.get("media_type"),
+                            "data": source.get("data"),
+                        }
+                    })
+        contents.append({"role": role, "parts": parts})
+    body: dict[str, object] = {"contents": contents}
+    if system:
+        body["systemInstruction"] = {"parts": [{"text": system}]}
+    config: dict[str, object] = {}
+    if payload.get("max_tokens") is not None:
+        config["maxOutputTokens"] = payload["max_tokens"]
+    if payload.get("temperature") is not None:
+        config["temperature"] = payload["temperature"]
+        if payload["temperature"] == 0:
+            config["thinkingConfig"] = {"thinkingBudget": 0}
+    tools = payload.get("tools")
+    if tools:
+        declarations = _tools_for_gemini(tools)
+        if declarations:
+            body["tools"] = [{"functionDeclarations": declarations}]
+    if config:
+        body["generationConfig"] = config
+    return body
+
+
+def _to_anthropic_response(google_response: dict[str, object]) -> dict[str, object]:
+    """Dịch phản hồi Gemini generateContent → dạng content blocks của Anthropic.
+
+    Dùng chung cho mọi service (chat/translate/OCR đọc block "text") và voice
+    command (đọc block "tool_use" dựng từ functionCall của Gemini).
+    """
+    candidates = google_response.get("candidates") or []
+    content: list[dict[str, object]] = []
+    if candidates and isinstance(candidates[0], dict):
+        for part in candidates[0].get("content", {}).get("parts", []):
+            if not isinstance(part, dict):
+                continue
+            if part.get("text"):
+                content.append({"type": "text", "text": part.get("text")})
+            call = part.get("functionCall")
+            if isinstance(call, dict):
+                content.append({
+                    "type": "tool_use",
+                    "name": call.get("name"),
+                    "input": call.get("args") or {},
+                })
+    return {"content": content}
+
+
+def _failed_host(exc: requests.ConnectionError) -> str | None:
+    """Rút tên máy chủ thật sự kết nối fail, từ văn bản exception của requests.
+
+    requests nhúng địa chỉ dưới dạng `host='dev-gw.vtvlive.vn'` (hoặc
+    `host=...` trong SSLError/ProxyError). Trả None khi không tìm thấy để nơi
+    gọi lùi về ANTHROPIC_BASE_URL.
+    """
+    match = re.search(r"host='([^']+)'", str(exc))
+    return match.group(1) if match else None
+
+
+def _post_google(payload: dict[str, object], settings) -> dict[str, object]:
+    """Gọi Gemini generateContent với payload đã dịch, trả JSON kiểu Anthropic.
+
+    URL gốc `https://generativelanguage.googleapis.com/v1beta/models/…` cố
+    định — `.env` chỉ cần đổi key; `ANTHROPIC_BASE_URL` vẫn giữ vai trò cho
+    gateway Anthropic/litellm khi quay lại cấu hình cũ.
+    """
+    model = _google_model_name(str(payload.get("model") or settings.anthropic_model))
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{model}:generateContent"
+    )
+    response = requests.post(
+        url,
+        headers={
+            "x-goog-api-key": settings.anthropic_auth_token,
+            "content-type": "application/json",
+        },
+        json=_to_google_payload(payload),
+        timeout=settings.anthropic_timeout_seconds,
+    )
+    response.raise_for_status()
+    return _to_anthropic_response(response.json())
+
+
 def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
-    """POST payload tuỳ ý tới POST {base_url}/v1/messages, trả JSON đầy đủ.
+    """POST payload tuỳ ý tới dịch vụ AI (Anthropic Messages hoặc Gemini),
+    trả JSON dạng content blocks như Anthropic.
 
     Dùng chung cho các tác vụ chỉ cần text (qua request_anthropic) và tác vụ
     cần tool use (voice command) — cùng một chỗ xử lý lỗi/timeout.
@@ -68,14 +261,12 @@ def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
     settings = get_settings()
     if not settings.anthropic_auth_token:
         raise AIServiceError("AI is not configured: ANTHROPIC_AUTH_TOKEN is missing on the backend")
-    url = f"{settings.anthropic_base_url.rstrip('/')}/v1/messages"
     try:
+        if _is_google_settings(settings):
+            return _post_google(payload, settings)
         response = requests.post(
-            url,
-            headers={
-                "x-api-key": settings.anthropic_auth_token,
-                "anthropic-version": "2023-06-01",
-            },
+            _messages_url(settings.anthropic_base_url),
+            headers=_auth_headers(settings),
             json=payload,
             timeout=settings.anthropic_timeout_seconds,
         )
@@ -84,10 +275,41 @@ def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
     except requests.RequestException as exc:
         status = getattr(exc.response, "status_code", None)
         detail = _error_message(exc.response)
+        model = str(payload.get("model") or settings.anthropic_model)
+        # Ghi log nguyên nhân thật trước khi dịch sang câu lỗi thân thiện.
+        logger.warning(
+            "AI gateway %s failed for model %s: %s %s",
+            settings.anthropic_base_url,
+            model,
+            type(exc).__name__,
+            str(exc)[:500],
+        )
+        # Timeout kết nối/phản hồi: gateway chậm hoặc tắc — câu riêng để không
+        # nhầm với "mất kết nối" (DNS/mạng đứt).
+        if isinstance(exc, requests.ConnectTimeout):
+            raise AIServiceError(
+                "The AI service did not accept the connection in time "
+                f"({settings.anthropic_timeout_seconds}s) — the gateway may be "
+                "overloaded"
+            ) from exc
+        if isinstance(exc, requests.ReadTimeout):
+            raise AIServiceError(
+                "The AI service took too long to answer "
+                f"(>{settings.anthropic_timeout_seconds}s) — try again"
+            ) from exc
+        # Không nối được tới gateway: DNS sai/mạng đứt/base_url sai. Nêu địa
+        # chỉ thật sự fail (lấy từ exception) — có thể là proxy chứ không
+        # phải gateway trong ANTHROPIC_BASE_URL, nói sai sẽ dẫn chẩn đoán lệch.
+        if isinstance(exc, requests.ConnectionError):
+            failed_host = _failed_host(exc)
+            where = failed_host or settings.anthropic_base_url
+            raise AIServiceError(
+                f"Cannot reach the AI service at {where} "
+                "— check the network or ANTHROPIC_BASE_URL"
+            ) from exc
         # 403 có thể là key hết hạn, hoặc key KHÔNG được cấp quyền model này
         # (z.ai: "key not allowed to access model … models=['mg::text']").
         if status in (401, 403) and "model" in detail.lower():
-            model = str(payload.get("model") or settings.anthropic_model)
             raise AIServiceError(
                 f"The AI key is not allowed to use model '{model}' "
                 f"({detail}). Use a key with access to that model, or change "
@@ -101,12 +323,21 @@ def post_anthropic(payload: dict[str, object]) -> dict[str, object]:
             raise AIServiceError(
                 f"Model '{settings.anthropic_model}' was not found on the AI service"
             ) from exc
+        # 429: gateway rate-limit/quota — thử lại sau, không phải lỗi cấu hình.
+        if status == 429:
+            raise AIServiceError(
+                "The AI service is rate limiting requests, wait a moment and try again"
+            ) from exc
+        # 5xx: gateway quá tải/lỗi nội bộ — phân biệt với lỗi kết nối.
+        if status is not None and status >= 500:
+            raise AIServiceError(
+                f"The AI service is having problems (HTTP {status}), try again later"
+            ) from exc
         # Model text-only nhận block ảnh → từ chối ngay (GLM: "content.type is
         # invalid, allowed values: ['text']").
         if status == 400 and "image" not in detail.lower() and (
             "content.type is invalid" in detail or "allowed values: ['text']" in detail
         ):
-            model = str(payload.get("model") or settings.anthropic_model)
             raise AIServiceError(
                 f"Model '{model}' cannot read images (text only), so scanned "
                 "pages cannot be OCR'd. Set OCR_VISION_MODEL in .env to a "
@@ -581,8 +812,8 @@ def answer_question(context: str, question: str) -> str:
         [{
             "type": "text",
             "text": (
-                "You are a document Q&A assistant. Use CONTEXT only. If information is missing, say "
-                "that it was not found. Answer in English.\n\n"
+                "You are a document Q&A assistant. Use CONTEXT only. If information is missing, "
+                "say that it was not found. Answer in English.\n\n"
                 f"CONTEXT:\n{context[:60000]}\n\nCÂU HỎI:\n{question[:4000]}"
             )
         }]
