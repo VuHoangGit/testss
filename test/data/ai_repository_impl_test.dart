@@ -6,8 +6,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:testss/data/repositories/ai_repository_impl.dart';
-import 'package:testss/domain/repositories/ai_repository.dart';
+import 'package:docvaultproject/data/repositories/ai_repository_impl.dart';
+import 'package:docvaultproject/domain/repositories/ai_repository.dart';
 
 class _MockAdapter extends Mock implements HttpClientAdapter {}
 

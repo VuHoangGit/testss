@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:testss/core/capture/photo_capture.dart';
+import 'package:docvaultproject/core/capture/photo_capture.dart';
 
 void main() {
   final DateTime at = DateTime(2026, 11, 22, 10, 15, 30);

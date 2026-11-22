@@ -21,7 +21,7 @@ Trạng thái hiện tại — đã hoàn thành:
 ### 1. Chạy backend
 
 ```powershell
-cd C:\Users\hoang\Downloads\testss\backend
+cd C:\Users\hoang\Downloads\DocVaultProject\backend
 # Lần đầu: tạo DB (SQLite — không cần Docker, đã trỏ sẵn trong backend/.env)
 .\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
@@ -49,7 +49,7 @@ backend **không có** endpoint đăng nhập, chỉ verify access token qua JWK
 Mở terminal thứ hai:
 
 ```powershell
-cd C:\Users\hoang\Downloads\testss
+cd C:\Users\hoang\Downloads\DocVaultProject
 $env:Path = "C:\Users\hoang\flutter\bin;$env:Path"
 flutter run -d edge
 ```
@@ -65,12 +65,12 @@ flutter run -d edge
 
 ```powershell
 # Backend
-cd C:\Users\hoang\Downloads\testss\backend
+cd C:\Users\hoang\Downloads\DocVaultProject\backend
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
 
 # Flutter
-cd C:\Users\hoang\Downloads\testss
+cd C:\Users\hoang\Downloads\DocVaultProject
 flutter analyze
 flutter test
 ```
@@ -207,7 +207,7 @@ server (`ANTHROPIC_AUTH_TOKEN=...`), tuyệt đối không đưa vào Flutter, G
 PowerShell local:
 
 ```powershell
-cd C:\Users\hoang\Downloads\testss\backend
+cd C:\Users\hoang\Downloads\DocVaultProject\backend
 (Get-Content .env) -replace '^ANTHROPIC_AUTH_TOKEN=.*$', 'ANTHROPIC_AUTH_TOKEN=<TOKEN_MOI_CUA_BAN>' |
   Set-Content .env
 ```

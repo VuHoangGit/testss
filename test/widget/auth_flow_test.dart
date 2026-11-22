@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:testss/core/error/exceptions.dart';
-import 'package:testss/domain/entities/user.dart';
-import 'package:testss/domain/repositories/auth_repository.dart';
-import 'package:testss/main.dart';
-import 'package:testss/presentation/providers.dart';
+import 'package:docvaultproject/core/error/exceptions.dart';
+import 'package:docvaultproject/domain/entities/user.dart';
+import 'package:docvaultproject/domain/repositories/auth_repository.dart';
+import 'package:docvaultproject/main.dart';
+import 'package:docvaultproject/presentation/providers.dart';
 
 class _FakeAuthRepository implements AuthRepository {
   _FakeAuthRepository();

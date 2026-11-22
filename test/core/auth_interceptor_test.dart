@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:testss/core/error/exceptions.dart';
-import 'package:testss/core/network/auth_interceptor.dart';
+import 'package:docvaultproject/core/error/exceptions.dart';
+import 'package:docvaultproject/core/network/auth_interceptor.dart';
 
 class _MockAdapter extends Mock implements HttpClientAdapter {}
 

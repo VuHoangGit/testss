@@ -5,10 +5,10 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:testss/domain/entities/document_entities.dart';
-import 'package:testss/domain/repositories/documents_repository.dart';
-import 'package:testss/presentation/documents/documents_controller.dart';
-import 'package:testss/presentation/documents/documents_providers.dart';
+import 'package:docvaultproject/domain/entities/document_entities.dart';
+import 'package:docvaultproject/domain/repositories/documents_repository.dart';
+import 'package:docvaultproject/presentation/documents/documents_controller.dart';
+import 'package:docvaultproject/presentation/documents/documents_providers.dart';
 
 class _FakeRepo implements DocumentsRepository {
   _FakeRepo(this.docs);

@@ -7,9 +7,9 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:testss/data/repositories/documents_repository_impl.dart';
-import 'package:testss/domain/entities/document_entities.dart';
-import 'package:testss/domain/repositories/documents_repository.dart';
+import 'package:docvaultproject/data/repositories/documents_repository_impl.dart';
+import 'package:docvaultproject/domain/entities/document_entities.dart';
+import 'package:docvaultproject/domain/repositories/documents_repository.dart';
 
 class _MockAdapter extends Mock implements HttpClientAdapter {}
 

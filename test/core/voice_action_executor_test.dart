@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:testss/domain/repositories/ai_repository.dart';
-import 'package:testss/presentation/ai/ai_providers.dart';
-import 'package:testss/presentation/documents/documents_controller.dart';
-import 'package:testss/presentation/documents/documents_providers.dart';
-import 'package:testss/presentation/shell/shell_providers.dart';
-import 'package:testss/presentation/voice/voice_action_executor.dart';
+import 'package:docvaultproject/domain/repositories/ai_repository.dart';
+import 'package:docvaultproject/presentation/ai/ai_providers.dart';
+import 'package:docvaultproject/presentation/documents/documents_controller.dart';
+import 'package:docvaultproject/presentation/documents/documents_providers.dart';
+import 'package:docvaultproject/presentation/shell/shell_providers.dart';
+import 'package:docvaultproject/presentation/voice/voice_action_executor.dart';
 
 VoiceCommandResult _decision(String action, Map<String, dynamic> params) =>
     VoiceCommandResult(action: action, params: params, reply: '...');
