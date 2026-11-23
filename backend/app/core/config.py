@@ -31,13 +31,14 @@ class Settings(BaseSettings):
     trusted_hosts: str = "*"
     # Thư mục chứa file tài liệu upload (Sprint 2). Rỗng = backend/storage/documents
     documents_dir: str = ""
+    # Thư mục chứa các biểu mẫu (.doc/.docx/.pdf) cho tab "Biểu mẫu".
+    # Thêm/xóa file trong thư mục là được, không cần upload/sửa database.
+    form_templates_dir: str = r"C:\Users\hoang\Downloads\New folder"
     # Giới hạn dung lượng 1 file upload (MB)
     max_upload_mb: int = 50
     # Loại file được phép upload (theo đuôi, phân cách bằng dấu phẩy). MIME do
     # server quyết định theo bảng này, KHÔNG tin content_type client gửi lên.
-    allowed_upload_types: str = (
-        "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,jpg,jpeg,png,gif,zip"
-    )
+    allowed_upload_types: str = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,jpg,jpeg,png,gif,zip"
     # Tổng dung lượng tài liệu tối đa của 1 user (MB); 0 = không giới hạn
     user_storage_quota_mb: int = 1024
     # Giới hạn tần suất gọi API (theo user, cửa sổ trượt 60 giây). Tắt bằng
@@ -72,6 +73,13 @@ class Settings(BaseSettings):
     # Credit AI: free mỗi tháng và giá mỗi lượt gọi tính năng AI.
     credit_monthly_free: int = 300
     credit_cost_ai: int = 50
+    # Origin web dùng ghép URL chia sẻ ({base}/?share={token}). Cấu hình đúng
+    # domain production; dev giữ mặc định localhost.
+    public_web_base_url: str = "http://localhost:53123"
+    # Giới hạn IP cho API public chia sẻ (không đăng nhập): metadata + file.
+    rate_limit_share_meta_per_minute: int = 60
+    rate_limit_share_file_per_minute: int = 30
+    rate_limit_share_comment_per_minute: int = 10
 
     @property
     def supabase_issuer(self) -> str:

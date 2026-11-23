@@ -25,6 +25,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _registerMode = false;
 
+  /// Trạng thái "đang gửi" cục bộ của form. Cố ý KHÔNG dùng
+  /// `authControllerProvider.isLoading`: AuthGate đổi màn theo state đó, nên
+  /// loading sẽ tháo cả LoginScreen và làm mất lỗi/chữ đã gõ.
+  bool _busy = false;
+
   @override
   void dispose() {
     _email.dispose();
@@ -124,42 +129,60 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final AuthController controller = ref.read(authControllerProvider.notifier);
     final String email = _email.text.trim();
     final String password = _password.text;
-    if (_registerMode) {
-      try {
-        await controller.signUp(
-          email: email,
-          password: password,
-          name: _name.text.trim(),
-        );
-        // Đăng ký xong KHÔNG tự đăng nhập — quay lại form đăng nhập, giữ sẵn email
+    setState(() => _busy = true);
+    try {
+      if (_registerMode) {
+        await _register(controller, email, password);
+        return;
+      }
+      await controller.signIn(email: email, password: password);
+    } on AuthException catch (e) {
+      // Sai email/mật khẩu: giữ nguyên form (email còn đó) và báo lỗi tại chỗ.
+      _showSnack(e.message, isError: !e.needsEmailConfirmation);
+    } on Exception catch (e) {
+      _showSnack('$e', isError: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Đăng ký tài khoản. Thành công (hoặc cần xác nhận email) → quay lại form
+  /// đăng nhập với email giữ sẵn, KHÔNG tự vào app: bắt buộc đăng nhập một lần.
+  Future<void> _register(
+    AuthController controller,
+    String email,
+    String password,
+  ) async {
+    try {
+      await controller.signUp(
+        email: email,
+        password: password,
+        name: _name.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        _registerMode = false;
+        _password.clear();
+      });
+      _showSnack('Account created successfully. Please sign in.');
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      // Supabase chờ xác nhận email: tài khoản ĐÃ tạo — vẫn chuyển sang form
+      // đăng nhập nhưng hướng dẫn vào hộp thư trước (không tô đỏ).
+      if (e.needsEmailConfirmation) {
         setState(() {
           _registerMode = false;
           _password.clear();
         });
-        _showSnack('Account created successfully. Please sign in.');
-      } on AuthException catch (e) {
-        // Supabase chờ xác nhận email: tài khoản ĐÃ tạo — vẫn chuyển sang
-        // form đăng nhập nhưng hướng dẫn vào hộp thư trước (không tô đỏ).
-        if (e.needsEmailConfirmation) {
-          setState(() {
-            _registerMode = false;
-            _password.clear();
-          });
-          _showSnack(e.message);
-        } else {
-          _showSnack(e.message, isError: true);
-        }
-      } on Exception catch (e) {
-        _showSnack('$e', isError: true);
+        _showSnack(e.message);
+      } else {
+        _showSnack(e.message, isError: true);
       }
-      return;
-    }
-    try {
-      await controller.signIn(email: email, password: password);
     } on Exception catch (e) {
       _showSnack('$e', isError: true);
     }
@@ -167,8 +190,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final AsyncValue<void> state = ref.watch(authControllerProvider);
-    final bool busy = state.isLoading;
+    final bool busy = _busy;
     final bool wide = MediaQuery.sizeOf(context).width >= 900;
 
     if (wide) {
@@ -482,9 +504,9 @@ class _BrandPanel extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: <Color>[
-            Color(0xFF312E81),
-            Color(0xFF4F46E5),
-            Color(0xFF7C3AED),
+            Color(0xFF0F172A),
+            Color(0xFF1D4ED8),
+            Color(0xFF3B82F6),
           ],
         ),
       ),

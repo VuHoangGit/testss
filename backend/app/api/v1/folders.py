@@ -47,7 +47,10 @@ def delete_folder(
         select(func.count()).select_from(Document).where(Document.folder_id == folder.id)
     )
     if (count or 0) > 0:
-        raise HTTPException(status_code=409, detail="Folder still contains documents and cannot be deleted")
+        raise HTTPException(
+            status_code=409,
+            detail="Folder still contains documents and cannot be deleted",
+        )
     db.delete(folder)
     db.commit()
     return {"detail": "Folder deleted"}

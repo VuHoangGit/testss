@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as supabase;
 
 import '../../core/error/exceptions.dart';
 import '../../core/network/dio_error_mapper.dart';
+import '../../core/network/supabase_auth_error_mapper.dart';
 import '../../domain/entities/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/models.dart';
@@ -56,7 +57,7 @@ class SupabaseAuthRepository implements AuthRepository {
         },
       );
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
     }
     // Supabase bật "Confirm email": đăng ký xong CHƯA có phiên — phải vào
     // hộp thư bấm link xác nhận rồi mới đăng nhập được. Ném lỗi riêng để UI
@@ -67,6 +68,17 @@ class SupabaseAuthRepository implements AuthRepository {
         needsEmailConfirmation: true,
       );
     }
+    // "Confirm email" TẮT: signUp trả luôn phiên. Nghiệp vụ yêu cầu đăng ký
+    // xong phải quay về form đăng nhập, nên đồng bộ hồ sơ vào DB ngay (để thông
+    // tin tài khoản nằm thật trong bảng users) rồi đăng xuất local — không để
+    // SDK tự đưa người dùng vào app khi chưa đăng nhập lần nào.
+    try {
+      await _fetchProfile(res.session!.accessToken);
+    } on Exception {
+      // Đồng bộ lỗi không làm hỏng việc đăng ký: tài khoản đã tạo trên Supabase,
+      // hồ sơ local sẽ được tạo ở lần đăng nhập đầu tiên (xem [login]).
+    }
+    await clearLocal();
   }
 
   @override
@@ -77,13 +89,56 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       await _auth.signInWithPassword(email: email, password: password);
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
     }
     final supabase.Session? session = _auth.currentSession;
     if (session == null) {
       throw const AuthException('Sign-in did not create a session — try again');
     }
-    return _profileOrClaims(session);
+    // Đăng nhập chỉ được coi là thành công khi backend trả về user local — chính
+    // lời gọi /auth/me này tạo/ cập nhật row trong bảng users. Trước đây lỗi ở
+    // bước này bị nuốt rồi rơi về claims của token, nên app mở ra mà DB không có
+    // user nào (và người dùng bị đá về login ngay sau đó).
+    try {
+      return await _fetchProfileWithRetry(session.accessToken);
+    } on AuthException catch (e) {
+      // Backend từ chối token (API trỏ sai project Supabase, JWKS lỗi...) → bỏ
+      // phiên vừa tạo để không kẹt ở trạng thái "nửa đăng nhập".
+      await clearLocal();
+      throw AuthException('${e.message} — the server rejected this session');
+    } on NetworkException {
+      // Không lưu được hồ sơ thì cũng bỏ phiên: giữ lại sẽ cho người dùng vào app
+      // trong khi thông tin tài khoản chưa nằm trong DB.
+      await clearLocal();
+      rethrow;
+    }
+  }
+
+  /// Gọi /auth/me, thử lại khi lỗi mạng tạm thời (backend vừa restart, máy vừa
+  /// ngủ dậy, tab vừa được focus lại). Lỗi xác thực (401) KHÔNG thử lại.
+  ///
+  /// Message lỗi cuối cùng có kèm địa chỉ API đang dùng: rất hay gặp trường hợp
+  /// địa chỉ server lưu trong localStorage (nút "Server…" ở màn Login) trỏ vào
+  /// IP/port cũ nên app báo "Could not connect" mà không rõ đang gọi đi đâu.
+  Future<AuthSession> _fetchProfileWithRetry(String accessToken) async {
+    const List<Duration> backoff = <Duration>[
+      Duration(milliseconds: 300),
+      Duration(milliseconds: 900),
+    ];
+    for (int attempt = 0; ; attempt++) {
+      try {
+        return await _fetchProfile(accessToken);
+      } on NetworkException {
+        if (attempt >= backoff.length) {
+          throw NetworkException(
+            'Could not connect to ${dio.options.baseUrl} — start the API server '
+            '(uvicorn app.main:app --port 8000) and check the "Server…" address '
+            'on the sign-in screen',
+          );
+        }
+        await Future<void>.delayed(backoff[attempt]);
+      }
+    }
   }
 
   @override
@@ -96,7 +151,7 @@ class SupabaseAuthRepository implements AuthRepository {
         redirectTo: _redirectTarget,
       );
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
     }
   }
 
@@ -110,7 +165,7 @@ class SupabaseAuthRepository implements AuthRepository {
         redirectTo: _redirectTarget,
       );
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
     }
   }
 
@@ -119,7 +174,38 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       await _auth.updateUser(supabase.UserAttributes(password: password));
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
+    }
+  }
+
+  @override
+  Future<AuthSession> updateDisplayName(String name) async {
+    final supabase.Session? session = _auth.currentSession;
+    if (session == null) {
+      throw const AuthException('No active session');
+    }
+    // PATCH /auth/me đánh dấu name_chosen_at + lưu tên vào bảng users; response
+    // là profile mới nên state dùng lại được ngay, không cần gọi thêm lần nữa.
+    try {
+      final Response<dynamic> res = await dio.patch<dynamic>(
+        '/auth/me',
+        data: <String, dynamic>{'name': name},
+        options: Options(
+          headers: <String, String>{
+            'Authorization': 'Bearer ${session.accessToken}',
+          },
+        ),
+      );
+      final Object? data = res.data;
+      if (data is Map<String, dynamic>) {
+        return AuthSession(
+          user: UserModel.fromJson(data).toEntity(),
+          accessToken: session.accessToken,
+        );
+      }
+      throw const NetworkException('Unexpected server response format');
+    } on DioException catch (e) {
+      throw mapDioException(e);
     }
   }
 
@@ -139,7 +225,7 @@ class SupabaseAuthRepository implements AuthRepository {
     try {
       await _auth.refreshSession();
     } on supabase.AuthException catch (e) {
-      throw _mapAuthError(e);
+      throw mapSupabaseAuthError(e.message);
     }
     final supabase.Session? session = _auth.currentSession;
     if (session == null) {
@@ -220,34 +306,4 @@ class SupabaseAuthRepository implements AuthRepository {
     );
   }
 
-  /// Map lỗi Supabase Auth sang message tiếng Việt thân thiện.
-  Exception _mapAuthError(supabase.AuthException e) {
-    final String raw = e.message.toLowerCase();
-    if (raw.contains('already registered')) {
-      return const AuthException('This email is already registered');
-    }
-    if (raw.contains('invalid login credentials') ||
-        raw.contains('invalid email or password')) {
-      return const AuthException('Incorrect email or password');
-    }
-    if (raw.contains('email not confirmed')) {
-      return const AuthException(
-        'Email not confirmed — open your inbox and click the confirmation link',
-        needsEmailConfirmation: true,
-      );
-    }
-    // Gói free của Supabase giới hạn số email gửi mỗi giờ (đăng ký/reset)
-    if (raw.contains('rate limit')) {
-      return const AuthException(
-        'The sign-in server is rate limiting emails — wait a few minutes and try again',
-      );
-    }
-    if (raw.contains('failed to fetch') || raw.contains('network')) {
-      return const NetworkException('Could not connect to the sign-in server');
-    }
-    if (raw.contains('refresh_token') || raw.contains('jwt expired')) {
-      return const AuthException('The session has expired');
-    }
-    return AuthException(e.message);
-  }
 }

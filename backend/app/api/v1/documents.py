@@ -25,7 +25,12 @@ from app.schemas.documents import (
     StorageUsageOut,
     UnprotectRequest,
 )
-from app.services import pdf_service, storage_service
+from app.schemas.shares import (
+    OwnerShareCommentOut,
+    ShareCreate,
+    ShareOut,
+)
+from app.services import pdf_service, share_service, storage_service
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -444,3 +449,86 @@ def unprotect_document(
     )
     db.commit()
     return DocumentOut.model_validate(new_doc)
+
+
+# -- Chia sẻ link công khai (SRS P1) + bình luận ghim (P2) --------------------
+
+
+@router.post("/{document_id}/shares", response_model=ShareOut, status_code=201)
+def create_share_link(
+    document_id: uuid.UUID, body: ShareCreate, db: DbSession, current: CurrentUser
+) -> ShareOut:
+    """Tạo link chia sẻ. Raw token trả đúng 1 lần trong `share_url` (FR-1)."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    share, token = share_service.create_share(
+        db,
+        document=doc,
+        permission=body.permission,
+        expires_in_hours=body.expires_in_hours,
+    )
+    return ShareOut(
+        id=share.id,
+        permission=share.permission,
+        expires_at=share.expires_at,
+        is_active=share.is_active,
+        view_count=share.view_count,
+        share_url=share_service.build_share_url(token),
+        created_at=share.created_at,
+    )
+
+
+@router.get("/{document_id}/shares", response_model=list[ShareOut])
+def list_share_links(
+    document_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> list[ShareOut]:
+    """Danh sách mọi link (gồm đã thu hồi/hết hạn) — FR-1.4."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    return [
+        ShareOut(
+            id=s.id,
+            permission=s.permission,
+            expires_at=s.expires_at,
+            is_active=s.is_active,
+            view_count=s.view_count,
+            share_url="",  # raw token không lưu — không thể hiện lại
+            created_at=s.created_at,
+        )
+        for s in share_service.list_shares(db, doc)
+    ]
+
+
+@router.delete("/{document_id}/shares/{share_id}", status_code=204)
+def revoke_share_link(
+    document_id: uuid.UUID, share_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> None:
+    """Thu hồi link — link chết ngay, không có "bỏ thu hồi" (FR-1.5)."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    share_service.revoke_share(db, doc, share_id)
+
+
+@router.get("/{document_id}/share-comments", response_model=list[OwnerShareCommentOut])
+def list_share_comments_for_owner(
+    document_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> list[OwnerShareCommentOut]:
+    """Mọi comment của mọi link thuộc tài liệu (P2, FR-6.5)."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    result: list[OwnerShareCommentOut] = []
+    for comment in share_service.list_all_comments_for_owner(db, doc):
+        out = OwnerShareCommentOut.model_validate(comment)
+        out.share_id = comment.share_id
+        result.append(out)
+    return result
+
+
+@router.delete("/{document_id}/share-comments/{comment_id}", status_code=204)
+def delete_share_comment(
+    document_id: uuid.UUID, comment_id: uuid.UUID, db: DbSession, current: CurrentUser
+) -> None:
+    """Chủ tài liệu xóa comment bất kỳ của link chia sẻ (P2, FR-4.7)."""
+    user = current
+    doc = _get_owned_document(db, document_id, user.id)
+    share_service.delete_comment_as_owner(db, doc, comment_id)

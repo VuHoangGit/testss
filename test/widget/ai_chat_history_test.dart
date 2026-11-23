@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:testss/domain/entities/chat_entities.dart';
-import 'package:testss/domain/entities/document_entities.dart';
-import 'package:testss/domain/repositories/ai_chat_repository.dart';
-import 'package:testss/presentation/ai/ai_providers.dart';
-import 'package:testss/presentation/ai/ai_chat_screen.dart';
-import 'package:testss/presentation/documents/documents_controller.dart';
-import 'package:testss/presentation/documents/documents_providers.dart';
+import 'package:docvaultproject/domain/entities/chat_entities.dart';
+import 'package:docvaultproject/domain/entities/document_entities.dart';
+import 'package:docvaultproject/domain/repositories/ai_chat_repository.dart';
+import 'package:docvaultproject/presentation/ai/ai_providers.dart';
+import 'package:docvaultproject/presentation/ai/ai_chat_screen.dart';
+import 'package:docvaultproject/presentation/documents/documents_controller.dart';
+import 'package:docvaultproject/presentation/documents/documents_providers.dart';
 
 class _FakeAiChatRepository implements AiChatRepository {
   _FakeAiChatRepository(this._messages);

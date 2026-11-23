@@ -38,11 +38,6 @@ def ensure_monthly_refresh(db: Session, user: User) -> User:
     return user
 
 
-def balance_of(db: Session, user: User) -> int:
-    ensure_monthly_refresh(db, user)
-    return user.credit_free + user.credit_purchased
-
-
 def charge(db: Session, user: User, cost: int | None = None) -> int:
     """Trừ credit cho 1 lượt gọi AI; trả về số dư sau khi trừ.
 

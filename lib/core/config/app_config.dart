@@ -23,6 +23,9 @@ class AppConfig {
   static String get defaultApiBaseUrl {
     const String defined = String.fromEnvironment('API_BASE_URL');
     if (defined.isNotEmpty) return defined;
+    if (kIsWeb && Uri.base.host.endsWith('ngrok-free.dev')) {
+      return '${Uri.base.scheme}://${Uri.base.host}/api/v1';
+    }
     if (kIsWeb) return 'http://localhost:8000/api/v1';
     if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
       return 'http://10.0.2.2:8000/api/v1';
@@ -39,6 +42,26 @@ class AppConfig {
   /// thoại qua IP LAN mà không cần build lại.
   static String get apiBaseUrl => serverUrlOverride ?? defaultApiBaseUrl;
 
+  /// API public share dùng chung origin của máy chủ đang phục vụ web.
+  /// Dev: thay port 53123 bằng backend 8000; production: giữ port origin.
+  static String get publicShareApiBaseUrl {
+    if (!kIsWeb) return defaultApiBaseUrl;
+    final Uri origin = Uri.base;
+    if (origin.host.endsWith('ngrok-free.dev')) {
+      return '${origin.scheme}://${origin.host}/api/v1';
+    }
+    final bool localDev =
+        origin.host == 'localhost' ||
+        origin.host == '127.0.0.1' ||
+        origin.host.startsWith('192.168.') ||
+        origin.host.startsWith('10.') ||
+        origin.host.startsWith('172.');
+    if (localDev) {
+      return '${origin.scheme}://${origin.host}:8000/api/v1';
+    }
+    return '${origin.scheme}://${origin.host}${origin.hasPort ? ':${origin.port}' : ''}/api/v1';
+  }
+
   /// Chuẩn hóa địa chỉ máy chủ người dùng nhập: thêm http:// khi thiếu scheme,
   /// bỏ path/query, ghép /api/v1. Ném [FormatException] (message tiếng Anh
   /// hiển thị ngay trong dialog) khi địa chỉ không dùng được.
@@ -47,7 +70,8 @@ class AppConfig {
     if (raw.isEmpty) {
       throw const FormatException('Enter a server address');
     }
-    final bool hasScheme = raw.startsWith('http://') || raw.startsWith('https://');
+    final bool hasScheme =
+        raw.startsWith('http://') || raw.startsWith('https://');
     if (!hasScheme) {
       if (raw.contains('://')) {
         throw const FormatException('Only http:// and https:// are supported');
@@ -60,7 +84,8 @@ class AppConfig {
     }
     // Uri.tryParse khoan dung với ký tự lạ (dấu cách bị mã hóa %20 trong
     // host) — host phải chỉ gồm chữ/số/dấu chấm/gạch nối mới dùng được.
-    if (!RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$').hasMatch(uri.host)) {
+    if (!RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$')
+        .hasMatch(uri.host)) {
       throw const FormatException('Invalid server address');
     }
     final String port = uri.hasPort ? ':${uri.port}' : '';

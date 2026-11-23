@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_theme.dart' show AppColors;
 import '../../domain/entities/document_entities.dart';
 import '../../domain/entities/user.dart';
 import '../ai/ai_providers.dart';
@@ -121,11 +122,12 @@ class _DesktopSidebar extends ConsumerWidget {
     final DocumentsViewFilter viewFilter =
         ref.watch(documentsControllerProvider).value?.viewFilter ??
         DocumentsViewFilter.all;
+    // Sidebar navy đậm cố định (kiểu ảnh mẫu: rail tối, nội dung sáng)
     return Container(
       width: 248,
-      decoration: BoxDecoration(
-        color: colors.surface,
-        border: Border(right: BorderSide(color: colors.outlineVariant)),
+      decoration: const BoxDecoration(
+        color: AppColors.sidebarBg,
+        border: Border(right: BorderSide(color: AppColors.sidebarBorder)),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
@@ -139,7 +141,7 @@ class _DesktopSidebar extends ConsumerWidget {
                   height: 36,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: <Color>[colors.primary, const Color(0xFF7C3AED)],
+                      colors: <Color>[colors.primary, const Color(0xFF3B82F6)],
                     ),
                     borderRadius: BorderRadius.circular(11),
                   ),
@@ -152,8 +154,10 @@ class _DesktopSidebar extends ConsumerWidget {
                 const SizedBox(width: 10),
                 Text(
                   'DocuVault',
-                  style: Theme.of(context).textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -187,7 +191,7 @@ class _DesktopSidebar extends ConsumerWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: colors.primaryContainer.withValues(alpha: 0.45),
+                color: Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -207,10 +211,15 @@ class _DesktopSidebar extends ConsumerWidget {
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
                   ),
-                  const Icon(Icons.more_horiz, size: 18),
+                  const Icon(
+                    Icons.more_horiz,
+                    size: 18,
+                    color: AppColors.sidebarMuted,
+                  ),
                 ],
               ),
             ),
@@ -225,7 +234,7 @@ class _DesktopSidebar extends ConsumerWidget {
     style: Theme.of(context).textTheme.labelSmall?.copyWith(
       letterSpacing: 1.1,
       fontWeight: FontWeight.w700,
-      color: Theme.of(context).colorScheme.outline,
+      color: AppColors.sidebarMuted,
     ),
   );
 }
@@ -244,35 +253,31 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colors = Theme.of(context).colorScheme;
+    // Pill trên nền navy: mục chọn = nền accent + chữ trắng (kiểu ảnh mẫu)
+    final Color bg = selected ? AppColors.primary : Colors.transparent;
+    final Color fg = selected ? Colors.white : AppColors.sidebarMuted;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
-        color: selected ? colors.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(999),
           onTap: onTap,
           child: SizedBox(
             height: 42,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(
                 children: <Widget>[
-                  Icon(
-                    icon,
-                    size: 20,
-                    color: selected ? colors.primary : colors.onSurfaceVariant,
-                  ),
+                  Icon(icon, size: 20, color: fg),
                   const SizedBox(width: 10),
                   Text(
                     title,
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      color: selected
-                          ? colors.primary
-                          : colors.onSurfaceVariant,
+                      color: fg,
                     ),
                   ),
                 ],
@@ -402,7 +407,7 @@ class _TopBarState extends ConsumerState<_TopBar> {
           filled: true,
           fillColor: colors.surfaceContainerHighest,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(999),
             borderSide: BorderSide.none,
           ),
         ),

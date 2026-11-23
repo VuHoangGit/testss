@@ -12,10 +12,15 @@ import 'payments_providers.dart';
 class PricingScreen extends ConsumerWidget {
   const PricingScreen({super.key});
 
-  Future<void> _buyPackage(BuildContext context, WidgetRef ref, String code) async {
+  Future<void> _buyPackage(
+    BuildContext context,
+    WidgetRef ref,
+    String code,
+  ) async {
     try {
-      final PaymentOrder order =
-          await ref.read(paymentsRepositoryProvider).createOrder(code);
+      final PaymentOrder order = await ref
+          .read(paymentsRepositoryProvider)
+          .createOrder(code);
       if (!context.mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(builder: (_) => OrderScreen(order: order)),
@@ -25,7 +30,10 @@ class PricingScreen extends ConsumerWidget {
     } on Exception catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Theme.of(context).colorScheme.error),
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
       );
     }
   }
@@ -33,11 +41,12 @@ class PricingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<CreditBalance> balance = ref.watch(creditBalanceProvider);
-    final AsyncValue<List<PricingPackage>> packages =
-        ref.watch(pricingPackagesProvider);
+    final AsyncValue<List<PricingPackage>> packages = ref.watch(
+      pricingPackagesProvider,
+    );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mua credit')),
+      appBar: AppBar(title: const Text('Buy credit')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: <Widget>[
@@ -50,10 +59,11 @@ class PricingScreen extends ConsumerWidget {
                   children: <Widget>[
                     Text(
                       '${formatCredits(b.total)} credit',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(

@@ -99,13 +99,77 @@ docs/                    phân tích nghiệp vụ (sprint 1) + luồng voice
 
 Google login cũng do **Supabase Auth** lo, không cần khai báo client ID ở backend:
 
-1. Supabase Dashboard → **Authentication → Providers → Google** → bật và dán
+1. Trong Google Cloud Console, project chứa OAuth client phải để **OAuth consent
+   screen → User type = External** (KHÔNG phải Internal) — xem mục lỗi 403 bên dưới.
+2. Supabase Dashboard → **Authentication → Providers → Google** → bật và dán
    *Client ID* / *Client Secret* lấy từ
    [Google Cloud Console](https://console.cloud.google.com) (Credentials → OAuth client ID).
-2. Trong Google Cloud, thêm **Authorized redirect URI**:
+3. Trong Google Cloud, thêm **Authorized redirect URI**:
    `https://<project-ref>.supabase.co/auth/v1/callback`.
-3. Client chỉ cần bấm "Continue with Google" — Supabase trả access token, backend
+4. Client chỉ cần bấm "Continue with Google" — Supabase trả access token, backend
    verify như mọi token khác.
+
+### Lỗi 403 `org_internal` — "project chỉ dùng được trong tổ chức sở hữu ứng dụng"
+
+Trang `accounts.google.com` chặn trước khi quay về app, nghĩa là OAuth consent
+screen đang ở **User type = Internal** (chỉ tài khoản trong tổ chức Google
+Workspace sở hữu project đăng nhập được; Gmail thường bị chặn). Sửa:
+
+Kiểm tra nhanh (30 giây): bấm "Continue with Google" rồi chọn một tài khoản
+**cùng tổ chức Workspace sở hữu project** (vd `@fpt.edu.vn` nếu project tạo bằng
+tài khoản trường). Vào được ⇒ đúng là consent screen đang Internal.
+
+1. Mở Google Cloud Console **bằng chính tài khoản đã tạo project** (project chỉ
+   hiện với tài khoản/tổ chức sở hữu) → **APIs & Services → OAuth consent screen**.
+2. **User type** → **External** → Save. Nếu mục này bị khoá (Google không cho
+   đổi chiều Internal → External) thì làm theo cách tạo project mới ở dưới.
+3. Mục **Publishing status** → **Publish app** (đưa về *In production*). Chỉ dùng
+   scope `openid/email/profile` nên không phải xin Google xác minh.
+   - Kẹt ở *Testing* thì chỉ tối đa 100 email trong **Test users** đăng nhập được;
+     thêm Gmail cần test vào danh sách này cũng chạy ngay.
+4. Giữ nguyên Client ID/Secret đã dán ở Supabase, redirect URI
+   `https://<project-ref>.supabase.co/auth/v1/callback` không đổi → thử lại.
+
+Nếu project GCP nằm trong tổ chức Workspace không có quyền đổi consent screen:
+tạo project mới bằng chính tài khoản Gmail cá nhân (project cá nhân luôn là
+External) → tạo OAuth client mới → dán Client ID/Secret mới vào Supabase.
+
+### Đặt tên hiển thị sau lần đăng nhập đầu tiên
+
+`/auth/me` trả thêm `name_chosen_at`:
+
+- `null` = người dùng **chưa tự đặt tên** → app hiện màn *"What should we call
+  you?"* ngay sau khi đăng nhập (Google hay email đều vậy), ô nhập điền sẵn tên
+  Google làm gợi ý; đặt xong mới vào app chính.
+- Có giá trị = đã đặt → vào thẳng app, và tên trong token Google **không** ghi
+  đè lựa chọn của người dùng ở các lần đăng nhập sau.
+
+Lưu tên: `PATCH /api/v1/auth/me` với body `{"name": "..."}` (rỗng → 422).
+
+Migration DB thật: `python scripts/migrate_add_name_chosen_at.py` (idempotent) —
+**chạy một lần** trên DB đang có dữ liệu; thiếu cột thì mọi API đọc bảng `users`
+sẽ lỗi `no such column`.
+
+## Lịch sử phiên bản tài liệu (Version History + AI Compare)
+
+Upload bản mới của cùng một tài liệu mà **không mất bản cũ**: bản hiện tại được
+hạ thành phiên bản (giữ tối đa 10 bản, FIFO), khôi phục bản cũ chỉ đổi con trỏ
+file. So sánh 2 bản = diff dòng cục bộ (miễn phí) + tóm tắt thay đổi bằng AI
+(tốn 1 credit, hoàn nếu lỗi; 2 bản giống nhau → không trừ credit).
+
+- Menu tài liệu → **Version history…**: upload bản mới (kèm ghi chú), restore,
+  xóa bản cũ, Compare with current (diff xanh/đỏ + tóm tắt AI tiếng Việt).
+- API: `POST /documents/{id}/versions` (upload bản mới) · `GET …/versions`
+  (list) · `GET …/versions/{vid}/download` · `POST …/versions/{vid}/restore`
+  · `DELETE …/versions/{vid}` · `POST …/versions/diff`.
+- Giới hạn: 10 bản/tài liệu; upload bản mới phải cùng loại file (MIME) với
+  bản hiện tại; quota đĩa tính cả các bản cũ (không lách được qua lịch sử).
+- Compare cần nội dung có lớp text (PDF/Word/txt) — file scan chưa OCR sẽ
+  được hướng dẫn chạy OCR trước.
+
+Migration DB thật: `python scripts/migrate_add_document_versions.py`
+(idempotent) — chạy một lần trên DB đang chạy; thiếu bảng thì API versions
+trả 500 `no such table: document_versions`.
 
 ## Biến môi trường backend (`.env` hoặc set thủ công)
 
@@ -115,8 +179,16 @@ Google login cũng do **Supabase Auth** lo, không cần khai báo client ID ở
 | `DATABASE_URL` | Postgres hoặc `sqlite:///./ten.db` | Postgres local |
 | `ALLOWED_EMAIL_DOMAINS` | Chặn domain (rỗng = mở) | rỗng |
 | `CORS_ORIGINS` | Origin web được gọi API | rỗng |
+| `ENVIRONMENT` | `dev` hoặc `production` (production tắt CORS regex LAN, bật HSTS) | `dev` |
+| `TRUSTED_HOSTS` | Host hợp lệ ở header `Host` (chống DNS rebinding), `*` = tắt | `*` |
 | `DOCUMENTS_DIR` | Thư mục lưu file upload | `backend/storage/documents` |
 | `MAX_UPLOAD_MB` | Giới hạn 1 file | 50 |
+| `ALLOWED_UPLOAD_TYPES` | Đuôi file được upload (MIME do server quyết định) | pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,jpg,jpeg,png,gif,zip |
+| `USER_STORAGE_QUOTA_MB` | Tổng dung lượng tài liệu/user (`0` = không giới hạn) | 1024 |
+| `RATE_LIMIT_ENABLED` | Bật giới hạn tần suất gọi API | `true` |
+| `RATE_LIMIT_AI_PER_MINUTE` | Số lượt gọi AI/phút/user | 60 |
+| `RATE_LIMIT_UPLOAD_PER_MINUTE` | Số lượt upload/phút/user | 30 |
+| `RATE_LIMIT_ORDERS_PER_MINUTE` | Số lượt tạo đơn nạp/phút/user | 20 |
 | `ANTHROPIC_AUTH_TOKEN` | Token dịch vụ AI (API tương thích Anthropic), chỉ đặt ở backend | rỗng |
 | `ANTHROPIC_BASE_URL` | Base URL dịch vụ AI | `https://api.z.ai/api/anthropic` |
 | `ANTHROPIC_MODEL` | Model cho OCR/chat/dịch | `glm-4.6` |
@@ -228,7 +300,40 @@ tháng, số tiền, số CCCD/MST) trả về danh sách `warnings` để ngư�
 Cài thêm 2 package render PDF: `pip install -r backend/requirements.txt`
 (`pypdfium2`, `Pillow`).
 
+**Chụp ảnh trang giấy bằng điện thoại**: tab AI → OCR có nút **"Scan with
+camera"** (Android/iOS mở app Camera; web trên điện thoại mở thẳng camera). Ảnh
+được thu về cạnh dài ≤ 2400px ngay trên máy, lưu thành tài liệu trong kho (thấy
+trong tab Files, xuất Word được) rồi OCR ngay. Server xoay theo EXIF, hạ cạnh dài
+về 2000px và nén JPEG trước khi gửi model — ảnh 12 MP không bị vượt giới hạn
+request. Chi tiết:
+[docs/ocr-pipeline.md](docs/ocr-pipeline.md#10-ảnh-chụp-từ-điện-thoại--luồng-quét).
+
 **Trang scan cần model đọc được ảnh**: `OCR_VISION_MODEL=deepseek-v4-pro` đã được
 kiểm chứng trên gateway hiện tại (khớp ~99% so với chữ gốc); model văn bản
 `ANTHROPIC_MODEL` không nhận ảnh nên hai việc dùng hai model khác nhau. Chi tiết:
 [docs/ocr-pipeline.md](docs/ocr-pipeline.md#6-model-vision--deepseek-v4-pro-đã-kiểm-chứng).
+
+## Bảo mật — những gì backend đang chặn
+
+| Lớp | Cơ chế |
+|---|---|
+| Xác thực | Verify JWT Supabase qua JWKS (chỉ RS256/ES256, check `iss`/`aud`/`exp`) — không nhận token tự ký |
+| Phân quyền | Mọi endpoint tài liệu/folder/AI/đơn nạp kiểm tra `owner_id`; truy cập chéo trả **404** (không lộ sự tồn tại) |
+| Giới hạn tần suất | Cửa sổ trượt 60 giây theo user cho `/ai/*`, upload và tạo đơn nạp → **429** + `Retry-After` |
+| Upload | Đọc theo chunk, vượt `MAX_UPLOAD_MB` là **413** ngay (không nạp cả file vào RAM); chỉ nhận đuôi trong `ALLOWED_UPLOAD_TYPES`; MIME do **server** quyết định theo đuôi |
+| Dung lượng | Tổng dung lượng/user ≤ `USER_STORAGE_QUOTA_MB`; xem mức dùng ở `GET /api/v1/documents/usage` |
+| Tải file | MIME lạ ép `application/octet-stream` + `nosniff` (không render HTML trên origin API) |
+| Header | `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS khi `ENVIRONMENT≠dev` |
+| CORS | Chỉ origin trong `CORS_ORIGINS` + regex localhost/LAN **chỉ khi dev** |
+| Webhook SePay | `compare_digest` với `SEPAY_WEBHOOK_SECRET`, chỉ nhận `transferType=in`, đối chiếu số tiền + `accountNumber` (khi đã cấu hình), chống replay bằng UNIQUE `sepay_transaction_id` |
+
+### Checklist trước khi chạy production
+
+1. `ENVIRONMENT=production`, khai báo `CORS_ORIGINS` và `TRUSTED_HOSTS` thật.
+2. Chạy sau reverse proxy **HTTPS** (backend chỉ nói HTTP).
+3. `SEPAY_WEBHOOK_SECRET` là chuỗi dài ngẫu nhiên; `SEPAY_BANK_ACCOUNT` khớp tài khoản nhận.
+4. Supabase Dashboard → Authentication: bật **Confirm email**, mật khẩu tối thiểu 8,
+   **Leaked password protection**, bật CAPTCHA; giữ bật **RLS** nếu project có bảng nghiệp vụ.
+5. Build release Android: bỏ `android:usesCleartextTraffic="true"` trong `AndroidManifest.xml`.
+6. Cân nhắc thêm CAPTCHA/giới hạn theo IP khi mở đăng ký công khai — mỗi tài khoản mới
+   có 300 credit free (6 lượt gọi AI), farm tài khoản = tiền thật.

@@ -6,6 +6,7 @@ import 'ai_chat_screen.dart';
 import 'ai_ocr_screen.dart';
 import 'ai_providers.dart';
 import 'ai_translate_screen.dart';
+import '../forms/forms_screen.dart';
 
 class AiScreen extends ConsumerWidget {
   const AiScreen({super.key});
@@ -34,11 +35,18 @@ class AiScreen extends ConsumerWidget {
             Icons.translate_outlined,
             AppColors.success,
           ),
+          (
+            'Form',
+            'Add company logo to document templates',
+            Icons.description_outlined,
+            AppColors.warning,
+          ),
         ];
     final List<Widget> pages = <Widget>[
       const AiOcrScreen(),
       const AiChatScreen(),
       const AiTranslateScreen(),
+      const FormsScreen(),
     ];
 
     return Column(

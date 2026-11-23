@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,22 +8,33 @@ import 'core/navigation/root_navigator_key.dart';
 import 'core/theme/app_theme.dart';
 import 'domain/entities/user.dart';
 import 'presentation/auth/auth_controller.dart';
+import 'presentation/auth/name_setup_screen.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/login/reset_password_screen.dart';
 import 'presentation/providers.dart';
+import 'presentation/shared/shared_view_screen.dart';
 import 'presentation/shell/shell_screen.dart';
 import 'presentation/theme/theme_mode_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Supabase tự khôi phục phiên từ localStorage và bắt session trong URL khi
-  // quay lại từ OAuth redirect (detectSessionInUrl mặc định bật).
+  // Đọc token trước khi Supabase xử lý URL OAuth để không mất deep link chia sẻ.
+  if (kIsWeb) {
+    final String? shareToken = Uri.base.queryParameters['share'];
+    if (shareToken != null && shareToken.isNotEmpty) {
+      initialShareToken = shareToken;
+    }
+  }
+  // Supabase tự khôi phục phiên và bắt session trong URL OAuth redirect.
   await Supabase.initialize(
     url: AppConfig.supabaseUrl,
     publishableKey: AppConfig.supabaseAnonKey,
   );
   runApp(const ProviderScope(child: DocuVaultApp()));
 }
+
+/// Token chia sẻ từ URL lúc khởi động (?share=…) — null khi mở app bình thường.
+String? initialShareToken;
 
 class DocuVaultApp extends ConsumerWidget {
   const DocuVaultApp({super.key});
@@ -50,6 +62,12 @@ class AuthGate extends ConsumerWidget {
     final AsyncValue<AuthSession?> auth = ref.watch(authControllerProvider);
     // Phiên đến từ link "Quên mật khẩu" → màn đặt mật khẩu mới thay vì app
     final bool recovery = ref.watch(passwordRecoveryProvider);
+    // Link chia sẻ ưu tiên trước mọi màn: người nhận xem thẳng SharedView,
+    // bỏ qua login kể cả khi app đang lưu phiên tài khoản khác (FR-3.1).
+    final String? shareToken = initialShareToken;
+    if (shareToken != null) {
+      return SharedViewScreen(token: shareToken);
+    }
 
     return auth.when(
       loading: () =>
@@ -73,6 +91,9 @@ class AuthGate extends ConsumerWidget {
           ? const LoginScreen()
           : recovery
           ? const ResetPasswordScreen()
+          // Lần đăng nhập đầu tiên (chưa tự đặt tên) → hỏi tên rồi mới vào app
+          : !session.user.nameChosen
+          ? NameSetupScreen(session: session)
           : ShellScreen(session: session),
     );
   }

@@ -23,6 +23,12 @@ class User(Base):
     supabase_id: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(320), index=True)
     name: Mapped[str | None] = mapped_column(String(255), default=None)
+    # NULL = người dùng chưa TỰ đặt tên hiển thị → app hiện màn đặt tên ngay
+    # sau lần đăng nhập đầu tiên (Google/email đều vậy). Có giá trị = đã đặt
+    # nên không hỏi lại, và tên trong token Google không được ghi đè nữa.
+    name_chosen_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime, default=None
+    )
     avatar_url: Mapped[str | None] = mapped_column(Text, default=None)
     # Credit dùng tính năng AI: 300 free reset đầu tháng (kỳ "YYYY-MM" đã
     # cấp gần nhất nằm ở credit_period), credit nạp mua cộng dồn không hết hạn.

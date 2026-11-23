@@ -1,11 +1,15 @@
 """Điểm vào FastAPI: app factory, CORS, mapping AuthError → 401, mount router."""
 
 import logging
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -24,6 +28,21 @@ _DEV_ORIGIN_REGEX = (
     r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})"
     r"(:\d+)?"
 )
+
+
+class _WebDistFiles(StaticFiles):
+    """StaticFiles cho build/web nhưng trả 404 (thay vì 405) với method không phải GET/HEAD.
+
+    SPA mount tại "/" nuốt mọi path không khớp route API. StaticFiles thuần
+    raise 405 cho POST/PUT/DELETE... trong khi các path này với method đó thực
+    chất là "route không tồn tại" → 404 đúng chuẩn REST (public share comment
+    DELETE không có endpoint cố ý, test kỳ vọng 404).
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        if scope["method"] not in ("GET", "HEAD"):
+            raise HTTPException(status_code=404)
+        return await super().get_response(path, scope)
 
 
 def create_app() -> FastAPI:
@@ -79,6 +98,10 @@ def create_app() -> FastAPI:
             "app": s.app_name,
             "ai_configured": bool(s.anthropic_auth_token.strip()),
         }
+
+    web_dist = Path(__file__).resolve().parents[2] / "build" / "web"
+    if web_dist.is_dir():
+        app.mount("/", _WebDistFiles(directory=str(web_dist), html=True), name="web")
 
     return app
 

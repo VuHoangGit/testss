@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:docvaultproject/domain/entities/document_entities.dart';
 import 'package:docvaultproject/domain/repositories/documents_repository.dart';
+import 'package:docvaultproject/core/files/pdf_browser_opener.dart';
 import 'package:docvaultproject/presentation/documents/documents_providers.dart';
 import 'package:docvaultproject/presentation/documents/documents_screen.dart';
 
@@ -139,6 +140,19 @@ Future<void> _pump(WidgetTester tester) async {
 }
 
 void main() {
+  test('PDF browser opener falls back on non-web platforms', () async {
+    var downloadCalls = 0;
+    final bool opened = await openPdfInBrowser(
+      fileName: 'hop-dong.pdf',
+      download: () async {
+        downloadCalls++;
+        return Uint8List.fromList(<int>[37, 80, 68, 70]);
+      },
+    );
+    expect(opened, isFalse);
+    expect(downloadCalls, 0);
+  });
+
   testWidgets('hiện toolbar, chip thư mục và danh sách tài liệu', (
     WidgetTester tester,
   ) async {

@@ -23,7 +23,7 @@ final Provider<AiChatRepository> aiChatRepositoryProvider =
       (Ref ref) => AiChatRepositoryImpl(dio: ref.watch(apiDioProvider)),
     );
 
-/// Index công cụ trong tab AI: 0 OCR · 1 Chat · 2 Dịch.
+/// Index công cụ trong tab AI: 0 OCR · 1 Chat · 2 Dịch · 3 Form.
 final NotifierProvider<AiToolController, int> aiToolProvider =
     NotifierProvider<AiToolController, int>(AiToolController.new);
 
@@ -32,7 +32,7 @@ class AiToolController extends Notifier<int> {
   int build() => 1; // mặc định Chat (giữ hành vi trước khi refactor)
 
   void setTool(int index) {
-    if (index >= 0 && index <= 2) {
+    if (index >= 0 && index <= 3) {
       state = index;
     }
   }

@@ -19,6 +19,7 @@ class _FakeAuthRepository implements AuthRepository {
   int resetEmailCount = 0;
   int updatePasswordCount = 0;
   bool failRegister = false;
+  bool failLogin = false;
   List<String> resetEmails = <String>[];
 
   final StreamController<AuthSession?> _changes =
@@ -52,8 +53,25 @@ class _FakeAuthRepository implements AuthRepository {
     required String password,
   }) async {
     loginCount++;
+    lastEmail = email;
     await Future<void>.delayed(const Duration(milliseconds: 50));
+    if (failLogin) {
+      // Repository production map lỗi Supabase thành đúng message này
+      throw const AuthException('Wrong email or password');
+    }
     return _session(email, null);
+  }
+
+  /// false = lần đăng nhập đầu tiên → app phải hỏi tên hiển thị.
+  bool nameChosen = true;
+  String lastEmail = 'hoang@gmail.com';
+  List<String> savedNames = <String>[];
+
+  @override
+  Future<AuthSession> updateDisplayName(String name) async {
+    savedNames.add(name);
+    nameChosen = true;
+    return _session(lastEmail, name);
   }
 
   @override
@@ -90,7 +108,12 @@ class _FakeAuthRepository implements AuthRepository {
   Future<AuthSession> refreshSession() async => throw UnimplementedError();
 
   AuthSession _session(String email, String? name) => AuthSession(
-    user: User(id: 'u-1', email: email, name: name ?? 'Tester'),
+    user: User(
+      id: 'u-1',
+      email: email,
+      name: name ?? 'Tester',
+      nameChosen: nameChosen,
+    ),
     accessToken: 'fake-access',
   );
 }
@@ -118,6 +141,83 @@ void main() {
     expect(find.textContaining('Good morning'), findsOneWidget);
     expect(find.text('Files'), findsOneWidget);
   });
+
+  testWidgets('Đăng nhập lần đầu → màn đặt tên → đặt xong mới vào app chính', (
+    WidgetTester tester,
+  ) async {
+    // nameChosen = false: backend trả name_chosen_at = null (chưa tự đặt tên)
+    final _FakeAuthRepository repo = _FakeAuthRepository()..nameChosen = false;
+    await tester.pumpWidget(await _app(repo));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'hoang@gmail.com');
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pumpAndSettle();
+
+    // Đăng nhập xong CHƯA vào app chính: phải đặt tên trước, ô nhập điền sẵn
+    // tên Google (chỉ là gợi ý, sửa được).
+    expect(find.text('What should we call you?'), findsOneWidget);
+    expect(find.textContaining('Good morning'), findsNothing);
+    expect(find.text('Tester'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField), 'Hoàng Vũ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+
+    expect(repo.savedNames, <String>['Hoàng Vũ']);
+    expect(find.textContaining('Good morning'), findsOneWidget);
+    expect(find.text('What should we call you?'), findsNothing);
+  });
+
+  testWidgets('Tên để trống → báo lỗi tại chỗ, không gọi server', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAuthRepository repo = _FakeAuthRepository()..nameChosen = false;
+    await tester.pumpWidget(await _app(repo));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'hoang@gmail.com');
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), '   ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter your name'), findsOneWidget);
+    expect(repo.savedNames, isEmpty);
+  });
+
+  testWidgets(
+    'REG-1: sai mật khẩu → vẫn ở Login, báo "Wrong email or password", giữ email',
+    (WidgetTester tester) async {
+      final _FakeAuthRepository repo = _FakeAuthRepository()..failLogin = true;
+      await tester.pumpWidget(await _app(repo));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byType(TextFormField).at(0),
+        'hoang@gmail.com',
+      );
+      await tester.enterText(find.byType(TextFormField).at(1), 'sai-mat-khau');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+
+      // Đăng nhập chạy 50ms rồi ném lỗi; trước đây AuthGate bị đổi state sang
+      // loading nên LoginScreen bị tháo khỏi cây widget, SnackBar lỗi mất và
+      // form trắng trơn (người dùng tưởng "tự refresh về trang đăng nhập").
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pumpAndSettle();
+
+      expect(repo.loginCount, 1);
+      expect(find.text('Wrong email or password'), findsOneWidget);
+      // vẫn ở màn đăng nhập và không mất chữ đã gõ
+      expect(find.widgetWithText(FilledButton, 'Sign in'), findsOneWidget);
+      expect(find.text('hoang@gmail.com'), findsOneWidget);
+    },
+  );
 
   testWidgets('Đăng ký → quay lại form đăng nhập kèm thông báo', (
     WidgetTester tester,

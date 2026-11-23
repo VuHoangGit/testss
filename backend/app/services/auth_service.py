@@ -28,7 +28,8 @@ def resolve_supabase_user(
     """Từ claim JWT (`sub`, `email` đã verified) → user local.
 
     Thứ tự:
-    1. Đã từng đăng nhập → tìm theo `supabase_id`, cập nhật profile nếu đổi.
+    1. Đã từng đăng nhập → tìm theo `supabase_id`, cập nhật profile nếu đổi
+       (trừ tên đã do người dùng tự đặt — xem `name_chosen_at`).
     2. User cũ khớp email (tài khoản trước thời Supabase) → gán `supabase_id`
        cho row cũ, giữ nguyên id → documents/folders cũ vẫn thuộc user này.
        Nhiều row trùng email: lấy row tạo sau cùng (dữ liệu thật hiếm gặp),
@@ -40,7 +41,9 @@ def resolve_supabase_user(
     """
     user = db.scalar(select(User).where(User.supabase_id == sub))
     if user is not None:
-        if name and name != user.name:
+        # Tên do người dùng tự đặt (name_chosen_at != None) là quyết định của
+        # họ — không để tên trong token Google ghi đè ở các lần đăng nhập sau.
+        if name and name != user.name and user.name_chosen_at is None:
             user.name = name
         if avatar_url and avatar_url != user.avatar_url:
             user.avatar_url = avatar_url

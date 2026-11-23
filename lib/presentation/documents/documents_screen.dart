@@ -9,7 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/files/file_saver.dart';
 import '../../domain/entities/document_entities.dart';
+import '../../domain/entities/share_entities.dart';
 import '../ai/ai_providers.dart';
+import '../providers.dart';
+import '../shared/share_dialog.dart';
+import '../shared/share_providers.dart';
+import '../shared/shared_view_screen.dart';
 import 'documents_controller.dart';
 import 'documents_providers.dart';
 import 'upload_flow.dart';
@@ -189,8 +194,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
       final String? saved = await const FileSaver().saveBytes(
         fileName: fileName,
         bytes: bytes,
-        mimeType:
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       );
       if (saved != null) _showSnack('Exported "$fileName"');
     } on Exception catch (e) {
@@ -256,6 +260,38 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               ref.read(documentsControllerProvider).value?.selectedFolderId,
             ),
       );
+    }
+  }
+
+  /// Dialog "Chia sẻ…" — tạo link công khai chỉ xem (SRS FR-1).
+  Future<void> _shareDocument(DocumentItem doc) async {
+    await showShareDialog(context, ref, doc);
+  }
+
+  /// "Bình luận chia sẻ" — chủ tài liệu đọc file qua API đăng nhập (server
+  /// không lưu token thô để mở lại URL), có quyền xóa mọi comment (FR-6.5).
+  Future<void> _openShareComments(DocumentItem doc) async {
+    try {
+      final String ownerName =
+          ref.read(authControllerProvider).value?.user.name?.trim() ?? '';
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => SharedViewScreen(
+            ownerDocumentId: doc.id,
+            ownerMeta: SharedDocumentMeta(
+              fileName: doc.name,
+              mimeType: doc.mimeType,
+              sizeBytes: doc.sizeBytes,
+              pageCount: doc.pageCount,
+              permission: 'comment',
+              ownerName: ownerName.isEmpty ? 'Bạn' : ownerName,
+            ),
+          ),
+        ),
+      );
+    } on Exception catch (e) {
+      _showSnack(e.toString());
     }
   }
 
@@ -612,11 +648,31 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             onProtect: () => _protect(doc, removing: false),
             onUnprotect: () => _protect(doc, removing: true),
             onVersions: () => _openVersionHistory(doc),
+            onShare: () => _shareDocument(doc),
+            onShareComments: () => _openShareComments(doc),
             onDelete: () => _deleteDocument(doc),
             onOpenViewer: () => _openViewer(doc),
           );
         },
       ),
+    );
+  }
+}
+
+/// Nhãn menu kèm số comment thật của mọi link (không dựng số giả ở client).
+class _ShareCommentsMenuLabel extends ConsumerWidget {
+  const _ShareCommentsMenuLabel({required this.documentId});
+
+  final String documentId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<int> count = ref.watch(
+      shareCommentCountProvider(documentId),
+    );
+    final int? total = count.value;
+    return Text(
+      total == null ? 'Bình luận chia sẻ' : 'Bình luận chia sẻ ($total)',
     );
   }
 }
@@ -717,6 +773,8 @@ class _DocumentTile extends StatelessWidget {
     required this.onProtect,
     required this.onUnprotect,
     required this.onVersions,
+    required this.onShare,
+    required this.onShareComments,
     required this.onDelete,
     required this.onOpenViewer,
   });
@@ -732,6 +790,8 @@ class _DocumentTile extends StatelessWidget {
   final VoidCallback onProtect;
   final VoidCallback onUnprotect;
   final VoidCallback onVersions;
+  final VoidCallback onShare;
+  final VoidCallback onShareComments;
   final VoidCallback onDelete;
   final VoidCallback onOpenViewer;
 
@@ -839,6 +899,10 @@ class _DocumentTile extends StatelessWidget {
                           onUnprotect();
                         case 'versions':
                           onVersions();
+                        case 'share':
+                          onShare();
+                        case 'shareComments':
+                          onShareComments();
                         case 'delete':
                           onDelete();
                       }
@@ -873,6 +937,14 @@ class _DocumentTile extends StatelessWidget {
                       const PopupMenuItem<String>(
                         value: 'versions',
                         child: Text('Version history…'),
+                      ),
+                      const PopupMenuItem<String>(
+                        value: 'share',
+                        child: Text('Chia sẻ…'),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'shareComments',
+                        child: _ShareCommentsMenuLabel(documentId: doc.id),
                       ),
                       const PopupMenuDivider(),
                       PopupMenuItem<String>(

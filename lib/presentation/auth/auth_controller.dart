@@ -33,22 +33,20 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     return repo.currentSession();
   }
 
-  /// Đăng nhập email/mật khẩu. Lỗi KHÔNG đưa vào state (tránh AuthGate hiện
-  /// màn hình lỗi toàn màn) — ném lại để LoginScreen hiện SnackBar.
+  /// Đăng nhập email/mật khẩu.
+  ///
+  /// KHÔNG đụng vào state khi bắt đầu: AuthGate đang hiện LoginScreen, đổi state
+  /// sang loading sẽ tháo LoginScreen khỏi cây widget — mất chữ người dùng đã gõ
+  /// và SnackBar lỗi không hiện được (lỗi rơi vào State đã dispose), người dùng
+  /// chỉ thấy form trắng, giống hệt "tự nhiên bị đá về trang đăng nhập".
+  /// Chỉ set state khi có phiên thật; lỗi ném thẳng về LoginScreen.
   Future<void> signIn({required String email, required String password}) async {
     final AuthRepository repo = ref.read(authRepositoryProvider);
-    state = const AsyncValue<AuthSession?>.loading();
-    try {
-      final AuthSession session = await repo.login(
-        email: email,
-        password: password,
-      );
-      state = AsyncValue<AuthSession?>.data(session);
-    } on Exception {
-      // Về trạng thái chưa đăng nhập → ở lại màn hình login
-      state = const AsyncValue<AuthSession?>.data(null);
-      rethrow;
-    }
+    final AuthSession session = await repo.login(
+      email: email,
+      password: password,
+    );
+    state = AsyncValue<AuthSession?>.data(session);
   }
 
   /// Đăng ký tài khoản. Không đổi state (vẫn chưa đăng nhập); lỗi ném về UI.
@@ -86,6 +84,15 @@ class AuthController extends AsyncNotifier<AuthSession?> {
   /// Gửi email đặt lại mật khẩu; lỗi ném về UI để hiện SnackBar.
   Future<void> sendPasswordReset(String email) async {
     await ref.read(authRepositoryProvider).sendPasswordReset(email);
+  }
+
+  /// Lưu tên hiển thị từ màn đặt tên. Thành công thì state đổi sang phiên đã có
+  /// tên → AuthGate tự chuyển vào app chính (không cần Navigator).
+  Future<void> setDisplayName(String name) async {
+    final AuthSession session = await ref
+        .read(authRepositoryProvider)
+        .updateDisplayName(name);
+    state = AsyncValue<AuthSession?>.data(session);
   }
 
   /// Hoàn tất đặt lại mật khẩu (từ link recovery): đổi mật khẩu → đăng xuất

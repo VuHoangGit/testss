@@ -37,6 +37,10 @@ abstract interface class AuthRepository {
   /// Đổi mật khẩu của phiên hiện tại (dùng cho phiên recovery).
   Future<void> updatePassword(String password);
 
+  /// Lưu tên hiển thị người dùng tự nhập (màn đặt tên sau khi đăng nhập lần
+  /// đầu) và trả phiên mới đã có `nameChosen = true`. Lỗi mạng → NetworkException.
+  Future<AuthSession> updateDisplayName(String name);
+
   /// Phát `true` mỗi khi phiên đến từ link "Quên mật khẩu" (event
   /// passwordRecovery của Supabase) — AuthGate dựa vào đây để hiện màn đặt
   /// mật khẩu mới thay vì vào app chính.

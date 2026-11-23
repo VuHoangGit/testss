@@ -31,6 +31,7 @@ from app.services import (
     ai_service,
     credit_service,
     ocr_service,
+    pdf_to_docx_service,
     storage_service,
     voice_command_service,
 )
@@ -55,13 +56,13 @@ def _attachment_header(filename: str) -> str:
     `"`/CR/LF có thể phá header hoặc chèn thêm tham số. Tên ASCII được lọc, tên
     đầy đủ (tiếng Việt) đi qua `filename*` đã percent-encode.
     """
-    safe_ascii = "".join(
-        ch for ch in filename if ch.isascii() and ch.isprintable() and ch not in '"\\;'
-    ).strip() or "document"
-    return (
-        f'attachment; filename="{safe_ascii}"; '
-        f"filename*=UTF-8''{quote(filename, safe='')}"
+    safe_ascii = (
+        "".join(
+            ch for ch in filename if ch.isascii() and ch.isprintable() and ch not in '"\\;'
+        ).strip()
+        or "document"
     )
+    return f"attachment; filename=\"{safe_ascii}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 def _owned_document(db, document_id: uuid.UUID, user_id) -> Document:
@@ -125,14 +126,32 @@ def ocr(
 def ocr_word(document_id: uuid.UUID, db: DbSession, current: CurrentUser) -> Response:
     user = current
     document = _owned_document(db, document_id, user.id)
-    _charge_ai(db, user)
     try:
-        content = ai_service.make_word_document(
-            _ocr_document(document, None).text, title=document.original_name
-        )
-    except ai_service.AIServiceError as exc:
-        credit_service.refund(db, user)
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if document.mime_type == "application/pdf":
+            pdf_bytes = storage_service.read_document_bytes(document.storage_key)
+            if pdf_bytes.startswith(b"%PDF"):
+                content = pdf_to_docx_service.export_pdf_to_docx(
+                    pdf_bytes,
+                    title=document.original_name,
+                )
+            else:
+                _charge_ai(db, user)
+                content = ai_service.make_word_document(
+                    _ocr_document(document, None).text,
+                    title=document.original_name,
+                )
+        else:
+            _charge_ai(db, user)
+            content = ai_service.make_word_document(
+                _ocr_document(document, None).text,
+                title=document.original_name,
+            )
+    except (ValueError, RuntimeError, ai_service.AIServiceError) as exc:
+        if document.mime_type != "application/pdf":
+            credit_service.refund(db, user)
+        if isinstance(exc, ai_service.AIServiceError):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -154,10 +173,7 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
     if not ai_service.is_text_extractable(document.mime_type, document.original_name):
         raise HTTPException(
             status_code=415,
-            detail=(
-                "This file type cannot be read "
-                "(supported: PDF, Word, txt/md and plain text)"
-            ),
+            detail=("This file type cannot be read (supported: PDF, Word, txt/md and plain text)"),
         )
     try:
         text = ai_service.extract_document_text(
@@ -176,9 +192,7 @@ def extract_text(document_id: uuid.UUID, db: DbSession, current: CurrentUser) ->
 
 
 @router.post("/translate", response_model=TranslationResult)
-def translate(
-    body: TranslationRequest, db: DbSession, current: CurrentUser
-) -> TranslationResult:
+def translate(body: TranslationRequest, db: DbSession, current: CurrentUser) -> TranslationResult:
     user = current
     source = body.source_language or None
     _charge_ai(db, user)

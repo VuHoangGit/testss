@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../core/files/pdf_browser_opener.dart';
 import '../../core/navigation/root_navigator_key.dart';
 import '../../domain/entities/document_entities.dart';
 import '../../domain/repositories/ai_repository.dart';
@@ -21,6 +22,13 @@ Future<String> openPdfViewer({
   required AiRepository aiRepository,
   required DocumentItem doc,
 }) async {
+  final bool openedInBrowser = await openPdfInBrowser(
+    fileName: doc.name,
+    download: () => repository.downloadDocument(doc.id),
+  );
+  if (openedInBrowser) {
+    return 'Opened "${doc.name}" in browser';
+  }
   final Uint8List bytes = await repository.downloadDocument(doc.id);
   final BuildContext? context = rootNavigatorKey.currentContext;
   if (context == null || !context.mounted) {

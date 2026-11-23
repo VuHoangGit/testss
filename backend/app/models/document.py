@@ -15,6 +15,7 @@ from app.db.base import Base, UTCDateTime
 
 if TYPE_CHECKING:
     from app.models.conversation import AiConversation
+    from app.models.document_share import DocumentShare
     from app.models.document_version import DocumentVersion
 
 
@@ -59,4 +60,9 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="DocumentVersion.version_number",
+    )
+    # Link chia sẻ công khai (token-based) — xóa tài liệu thì link chết ngay
+    # (cascade, FR nghiệm thu P1).
+    shares: Mapped[list["DocumentShare"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
     )

@@ -174,9 +174,7 @@ def _tools() -> list[dict[str, object]]:
 def _describe_documents(documents: list[VoiceDocument]) -> str:
     if not documents:
         return "(no documents yet)"
-    return "\n".join(
-        f"- {d.name} ({d.mime_type or 'unknown type'})" for d in documents[:80]
-    )
+    return "\n".join(f"- {d.name} ({d.mime_type or 'unknown type'})" for d in documents[:80])
 
 
 def _build_prompt(transcript: str, context: VoiceAppContext) -> str:
@@ -279,9 +277,7 @@ def interpret(transcript: str, context: VoiceAppContext, session_id: str) -> Voi
     if function_call is None:
         _remember(session_id, transcript, text_reply)
         fallback = "Sorry, I didn't understand that command."
-        return VoiceCommandResponse(
-            action=None, params={}, reply=text_reply.strip() or fallback
-        )
+        return VoiceCommandResponse(action=None, params={}, reply=text_reply.strip() or fallback)
 
     name = str(function_call.get("name", ""))
     args = function_call.get("args") or {}

@@ -9,13 +9,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:testss/core/capture/photo_capture.dart';
-import 'package:testss/domain/entities/document_entities.dart';
-import 'package:testss/domain/repositories/ai_repository.dart';
-import 'package:testss/presentation/ai/ai_ocr_screen.dart';
-import 'package:testss/presentation/ai/ai_providers.dart';
-import 'package:testss/presentation/documents/documents_controller.dart';
-import 'package:testss/presentation/documents/documents_providers.dart';
+import 'package:docvaultproject/core/capture/photo_capture.dart';
+import 'package:docvaultproject/domain/entities/document_entities.dart';
+import 'package:docvaultproject/domain/repositories/ai_repository.dart';
+import 'package:docvaultproject/presentation/ai/ai_ocr_screen.dart';
+import 'package:docvaultproject/presentation/ai/ai_providers.dart';
+import 'package:docvaultproject/presentation/documents/documents_controller.dart';
+import 'package:docvaultproject/presentation/documents/documents_providers.dart';
 
 /// PNG 1×1 hợp lệ — widget test không có camera và Image.memory cần bytes thật.
 final Uint8List _onePixelPng = base64Decode(

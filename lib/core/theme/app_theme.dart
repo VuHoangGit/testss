@@ -1,9 +1,9 @@
-/// Design system DocuVault — SaaS style (Google Drive × Notion × Linear).
+/// Design system DocuVault — restyle theo ảnh mẫu: sidebar navy đậm cố định,
+/// accent royal blue, nav item + nút dạng pill (bo tròn hết cỡ), card bo 18.
 ///
 /// Material 3 nhưng không dùng default Material look: màu tự đặt (không seed),
-/// radius 16 card / 10 input-button / 999 pill, border 1px, shadow nhẹ.
-/// Semantic color (success/warning/info/AI) expose qua [AppColors] để các
-/// màn dùng chung, tránh hardcode màu rải rác trong widget.
+/// border 1px, shadow nhẹ. Semantic color (success/warning/info/AI) expose
+/// qua [AppColors] để các màn dùng chung, tránh hardcode màu rải rác.
 library;
 
 import 'package:flutter/material.dart';
@@ -12,12 +12,18 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const Color primary = Color(0xFF4F46E5);
-  static const Color primaryHover = Color(0xFF4338CA);
-  static const Color primaryLight = Color(0xFFEEF2FF);
+  // Brand — royal blue theo ảnh mẫu (thay indigo cũ)
+  static const Color primary = Color(0xFF1D4ED8);
+  static const Color primaryHover = Color(0xFF1E40AF);
+  static const Color primaryLight = Color(0xFFEFF6FF);
   static const Color aiPrimary = Color(0xFF7C3AED);
   static const Color aiLight = Color(0xFFF5F3FF);
+
+  // Sidebar navy đậm cố định cho cả light & dark (kiểu ảnh mẫu: rail tối,
+  // vùng nội dung sáng — tương phản mạnh)
+  static const Color sidebarBg = Color(0xFF0F172A);
+  static const Color sidebarBorder = Color(0xFF243046);
+  static const Color sidebarMuted = Color(0xFF9AA6BC);
 
   // Trạng thái
   static const Color success = Color(0xFF16A34A);
@@ -25,14 +31,14 @@ class AppColors {
   static const Color error = Color(0xFFDC2626);
   static const Color info = Color(0xFF2563EB);
 
-  // Light surface
-  static const Color lightBg = Color(0xFFF7F8FC);
+  // Light surface — trắng ngà lạnh theo ảnh mẫu
+  static const Color lightBg = Color(0xFFF8FAFD);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightBorder = Color(0xFFE5E7EB);
-  static const Color lightDivider = Color(0xFFEEF0F4);
-  static const Color lightHeading = Color(0xFF111827);
-  static const Color lightBody = Color(0xFF4B5563);
-  static const Color lightMuted = Color(0xFF9CA3AF);
+  static const Color lightBorder = Color(0xFFE7EBF3);
+  static const Color lightDivider = Color(0xFFEDF1F7);
+  static const Color lightHeading = Color(0xFF0F172A);
+  static const Color lightBody = Color(0xFF475569);
+  static const Color lightMuted = Color(0xFF94A3B8);
 
   // Dark surface
   static const Color darkBg = Color(0xFF0F1115);
@@ -60,7 +66,7 @@ class AppTheme {
       surface: AppColors.lightSurface,
       onSurface: AppColors.lightHeading,
       onSurfaceVariant: AppColors.lightBody,
-      surfaceContainerHighest: const Color(0xFFF1F3F9),
+      surfaceContainerHighest: const Color(0xFFEFF3FA),
       error: AppColors.error,
       onError: Colors.white,
       errorContainer: const Color(0xFFFEE2E2),
@@ -73,10 +79,10 @@ class AppTheme {
 
   static ThemeData dark() {
     final ColorScheme scheme = ColorScheme.dark(
-      primary: const Color(0xFF818CF8),
-      onPrimary: const Color(0xFF101233),
-      primaryContainer: const Color(0xFF2D2A63),
-      onPrimaryContainer: const Color(0xFFC7D2FE),
+      primary: const Color(0xFF7CA6F5),
+      onPrimary: const Color(0xFF0A1830),
+      primaryContainer: const Color(0xFF17274D),
+      onPrimaryContainer: const Color(0xFFC3D7FB),
       secondary: AppColors.aiPrimary,
       onSecondary: Colors.white,
       secondaryContainer: const Color(0xFF33245E),
@@ -170,10 +176,8 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: scheme.primary,
           foregroundColor: scheme.onPrimary,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
@@ -181,10 +185,8 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: scheme.primary,
           side: BorderSide(color: scheme.outline),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
@@ -199,8 +201,8 @@ class AppTheme {
         elevation: 0,
         color: scheme.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: scheme.outline),
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: scheme.outlineVariant),
         ),
         margin: EdgeInsets.zero,
       ),

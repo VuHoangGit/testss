@@ -30,6 +30,7 @@ const Map<String, String> _tabLabels = <String, String>{
   'dashboard': 'Overview',
   'documents': 'Documents',
   'ai': 'AI',
+  'forms': 'Biểu mẫu',
   'account': 'Account',
 };
 

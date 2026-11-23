@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>DocuVault — Tổng quan chức năng &amp; luồng xử lý</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, "Noto Sans", sans-serif; color: #1a2233; font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 20pt; margin: 0 0 2mm; color: #0f2b46; }
+  .sub { color: #5b6b7f; font-size: 9.5pt; margin-bottom: 5mm; }
+  h2 { font-size: 13pt; color: #0f2b46; border-bottom: 2px solid #2563eb; padding-bottom: 1.5mm; margin: 7mm 0 3mm; page-break-after: avoid; }
+  h3 { font-size: 11pt; color: #1e3a8a; margin: 4.5mm 0 2mm; page-break-after: avoid; }
+  p { margin: 0 0 2mm; }
+  ul { margin: 0 0 2mm; padding-left: 5mm; }
+  li { margin-bottom: 0.8mm; }
+  table { border-collapse: collapse; width: 100%; margin: 2mm 0 4mm; font-size: 9pt; }
+  th { background: #eef2ff; color: #0f2b46; text-align: left; }
+  th, td { border: 0.5pt solid #c3cde0; padding: 1.4mm 2mm; vertical-align: top; }
+  .flow { background: #f6f8fc; border: 0.5pt solid #c3cde0; border-left: 2.5pt solid #2563eb; border-radius: 1.5mm; padding: 2mm 3mm; margin: 2mm 0 4mm; font-size: 9.3pt; page-break-inside: avoid; }
+  .flow b { color: #0f2b46; }
+  .arch { background: #f0fdf4; border: 0.5pt solid #86efac; border-radius: 1.5mm; padding: 2mm 3mm; margin: 2mm 0 4mm; font-size: 9.3pt; }
+  code { font-family: Consolas, monospace; font-size: 8.6pt; background: #f1f5f9; padding: 0 1mm; border-radius: 1mm; }
+  .note { font-size: 8.5pt; color: #64748b; }
+  .pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>DocuVault — Tổng quan chức năng &amp; luồng xử lý</h1>
+<div class="sub">Ứng dụng quản lý tài liệu + AI đa nền tảng (Flutter web/desktop/mobile · FastAPI · Supabase Auth · SQLite/PostgreSQL) — bản mô tả đơn giản, tổng hợp từ mã nguồn thực tế của dự án.</div>
+
+<h2>1. Kiến trúc tổng thể</h2>
+<div class="arch">
+<b>Client (Flutter, Clean Architecture + Riverpod)</b> — màn hình: Login, Shell (4 tab), Documents, AI (OCR/Translate/Chat), Voice, Forms, Payments, Shared view.<br>
+<b>Backend (FastAPI + SQLAlchemy, prefix /api/v1)</b> — routers: <code>auth, folders, documents, versions, ai, forms, payments, public_shares</code>; services: storage (đĩa), pdf (pypdf), ai (Gemini), credit, payment, share, form, pdf_to_docx, voice_command.<br>
+<b>Dịch vụ ngoài:</b> Supabase Auth (đăng nhập email/mật khẩu + Google, JWKS verify token) · Gemini API (AI) · SePay (thanh toán) · LibreOffice (doc→docx, khi có).
+</div>
+<p><b>Luồng chung của mọi request API:</b> Flutter (Dio + interceptor tự refresh token) → FastAPI → dependency <code>CurrentUser</code> verify JWT với JWKS của Supabase → load/sửa dữ liệu qua SQLAlchemy → trả JSON (hoặc file stream). Các route public share thì bỏ qua auth, thay bằng rate limit theo IP.</p>
+
+<h2>2. Chức năng chính &amp; luồng xử lý</h2>
+
+<h3>2.1. Đăng nhập &amp; tài khoản (Supabase Auth)</h3>
+<div class="flow">
+<b>Đăng nhập/đăng ký:</b> Client gửi email/mật khẩu (hoặc Google OAuth) trực tiếp tới <b>Supabase Auth</b> → nhận access + refresh token → lưu phiên.
+<b>Lần đầu vào app:</b> backend PATCH <code>/auth/me</code> lấy/đặt tên hiển thị (màn "Đặt tên" hiện khi chưa có).
+<b>Mọi lời gọi API:</b> access token kèm header → backend verify chữ ký qua JWKS → xác định user (bảng <code>users</code> đồng bộ theo user_id Supabase).
+<b>Hết hạn token:</b> Dio interceptor tự gọi Supabase refresh rồi thử lại request — người dùng không phải đăng nhập lại.
+</div>
+
+<h3>2.2. Kho tài liệu (thư mục, tải lên, viewer)</h3>
+<div class="flow">
+<b>Tải lên:</b> chọn file → client upload (multipart) → backend lưu file vào thư mục đĩa (<code>storage_service</code>) + tạo bản ghi <code>documents</code> (kèm folder, kích thước, loại) → danh sách tự refresh, có tiến độ.
+<b>Quản lý:</b> tạo/xóa thư mục (chip lọc), đánh dấu yêu thích (PATCH favorite), sắp xếp, grid/list, tìm kiếm — tất cả qua REST <code>/folders</code>, <code>/documents</code>.
+<b>Xem:</b> bấm file → client gọi <code>GET /documents/{id}/open</code> rồi stream <code>/download</code> → mở viewer phù hợp theo loại: PDF viewer / ảnh / text.
+<b>Thống kê:</b> GET <code>/documents/usage</code> → dung lượng đã dùng hiển thị ở tab Tài khoản.
+</div>
+
+<h3>2.3. Công cụ PDF (gộp, tách, mật khẩu, xuất Word)</h3>
+<div class="flow">
+<b>Gộp:</b> tích ≥ 2 PDF → POST <code>/documents/merge</code> → pypdf nối các file → tạo tài liệu mới (bản gốc giữ nguyên).
+<b>Tách:</b> POST <code>/{id}/split</code> (vd 1-3,5) → mỗi khoảng trang thành 1 file PDF mới.
+<b>Mật khẩu:</b> POST <code>/{id}/protect</code> (mã hóa AES) hoặc <code>/unprotect</code> (đọc mật khẩu cũ) → sinh bản PDF mới.
+<b>Xuất Word:</b> "Export to Word" → service <code>pdf_to_docx</code> trích văn bản + font từ PDF, dựng layout trang → sinh file .docx tải về.
+</div>
+
+<h3>2.4. AI — OCR, dịch, chatbot RAG, voice</h3>
+<div class="flow">
+<b>OCR:</b> POST <code>/ai/ocr/{document_id}</code> → backend đọc PDF/ảnh → gọi <b>Gemini</b> nhận diện chữ (API native, flash fallback) → trả text + độ tin cậy → hiển thị, có nút xuất DOCX. Biến thể "word" cho từng vùng ảnh.
+<b>Dịch:</b> POST <code>/ai/translate</code> (text + cặp ngôn ngữ) → Gemini dịch → trả kết quả.
+<b>Chat RAG:</b> POST <code>/ai/chat</code> → backend trích text tài liệu được chọn làm ngữ cảnh → Gemini trả lời có dẫn nguồn; hội thoại lưu DB (<code>/conversations</code>: xem, chi tiết, xóa).
+<b>Lệnh giọng nói:</b> client ghi âm → speech-to-text → POST <code>/ai/voice-command</code> → AI chọn action (chuyển tab, mở công cụ AI, đọc kết quả gần nhất…) + validate tham số → client thực thi.
+<b>Chụp ảnh OCR:</b> camera điện thoại chụp tài liệu → ảnh gửi lên endpoint OCR như trên.
+</div>
+
+<h3>2.5. Credit AI &amp; thanh toán SePay</h3>
+<div class="flow">
+<b>Số dư:</b> mỗi user 300 credit free/tháng (tự reset khi sang kỳ, lazy) + credit nạp; GET <code>/payments/credits</code> xem số dư.
+<b>Trừ/hoàn:</b> mỗi lượt gọi AI trừ credit (<code>credit_service.charge</code>); nếu lượt gọi lỗi thì tự hoàn (<code>refund</code>). Không đủ credit → lỗi 402 → UI hướng dẫn nạp.
+<b>Nạp credit:</b> chọn gói (GET <code>/payments/pricing</code>) → POST tạo đơn → app hiện <b>QR chuyển khoản SePay</b> (số tiền + mã đơn) → người dùng chuyển khoản → <b>SePay gọi webhook</b> POST <code>/payments/sepay/webhook</code> (xác thực API key) → cộng credit, đánh dấu đơn đã thanh toán → app polling thấy đơn PAID → cập nhật số dư. Lịch sử: GET <code>/payments/orders</code>.
+</div>
+
+<h3>2.6. Phiên bản tài liệu &amp; so sánh</h3>
+<div class="flow">
+Mỗi lần sửa/tạo lại file, backend lưu snapshot vào <code>document_versions</code> (POST <code>/documents/{id}/versions</code>). Người dùng mở lịch sử phiên bản: tải về (<code>/download</code>), <b>phục hồi</b> (<code>/restore</code> — tạo phiên bản mới từ bản cũ), xóa, hoặc <b>so sánh 2 phiên bản</b> (POST <code>/diff</code> →Diff theo từng đoạn văn bản, highlight thêm/bớt).
+</div>
+
+<h3>2.7. Chia sẻ bằng link + bình luận ghim vị trí (public)</h3>
+<div class="flow">
+<b>Tạo link:</b> chủ tài liệu POST <code>/documents/{id}/shares</code> (chọn hết hoặc từng trang, hết hạn, mật khẩu tùy chọn) → sinh token ngẫu nhiên → link dạng <code>/shared/{token}</code>.
+<b>Người nhận (không cần tài khoản):</b> mở link → GET <code>/public/shares/{token}</code> (meta) → nếu có mật khẩu, nhập đúng mới được → stream file <code>/{token}/file</code> → xem trong viewer chỉ-đọc; hết hạn/sai mật khẩu/đóng link → lỗi 404/410.
+<b>Bình luận:</b> bấm vào vị trí trên trang → POST <code>/public/shares/{token}/comments</code> (page + toạ độ % + nội dung + tên khách) → chủ tài liệu xem/xóa ở màn bình luận (<code>GET /documents/{id}/share-comments</code>).
+<b>An toàn:</b> nhóm route public có rate limit theo IP, không đụng auth.
+</div>
+
+<h3>2.8. Biểu mẫu — gắn logo (WYSIWYG)</h3>
+<div class="flow">
+<b>Xem mẫu:</b> GET <code>/forms/templates</code> (danh sách biểu mẫu sẵn trong thư mục cấu hình) → preview PDF hoặc ảnh từng trang (<code>/page-image</code> trả PNG + số trang, kích thước điểm ảnh làm nền kéo-thả).
+<b>Đặt logo:</b> kéo logo PNG/JPEG lên trang (toạ độ %) → POST <code>/forms/process</code> (multipart: logos + placements + tuỳ chọn watermark, mật khẩu) → backend dựng file mới (DOC→DOCX qua LibreOffice nếu cần) → chèn logo → trả file tải về.
+</div>
+
+<h2 class="pagebreak">3. Tóm tắt API backend (theo router)</h2>
+<table>
+<tr><th>Nhóm</th><th>Endpoint chính</th><th>Chức năng</th></tr>
+<tr><td>Auth</td><td><code>GET/PATCH /auth/me</code></td><td>Hồ sơ, đặt tên hiển thị (đăng nhập do Supabase)</td></tr>
+<tr><td>Folders</td><td><code>GET/POST /folders</code>, <code>DELETE /folders/{id}</code></td><td>Danh sách / tạo / xóa thư mục</td></tr>
+<tr><td rowspan="3">Documents</td><td><code>GET /documents</code>, <code>GET /{id}/download</code>, <code>DELETE /{id}</code></td><td>Danh sách (lọc thư mục/yêu thích), tải file, xóa</td></tr>
+<tr><td><code>PATCH /{id}/favorite</code>, <code>POST /{id}/open</code>, <code>GET /usage</code></td><td>Yêu thích, ghi nhận mở, dung lượng đã dùng</td></tr>
+<tr><td><code>POST /merge</code>, <code>/{id}/split|protect|unprotect</code>, <code>/{id}/shares</code>…</td><td>Công cụ PDF, quản lý link chia sẻ + bình luận của chủ</td></tr>
+<tr><td>Versions</td><td><code>POST /documents/{id}/versions</code> · <code>/{vid}/download|restore</code> · <code>POST /diff</code></td><td>Lưu/tải/phục hồi phiên bản, so sánh diff</td></tr>
+<tr><td rowspan="3">AI</td><td><code>POST /ai/ocr/{id}</code> (+ <code>/word</code>), <code>GET /extract-text/{id}</code></td><td>Nhận dạng chữ (Gemini), trích text</td></tr>
+<tr><td><code>POST /ai/translate</code>, <code>POST /ai/chat</code>, <code>/conversations…</code></td><td>Dịch, chat RAG + quản lý hội thoại</td></tr>
+<tr><td><code>POST /ai/voice-command</code></td><td>Phân tích lệnh giọng nói → action</td></tr>
+<tr><td>Forms</td><td><code>GET /forms/templates…</code>, <code>POST /forms/process</code></td><td>Danh sách/preview biểu mẫu, chèn logo vào file</td></tr>
+<tr><td>Payments</td><td><code>GET /pricing|credits|orders</code>, <code>POST /sepay/webhook</code></td><td>Gói credit, số dư, đơn nạp, webhook cộng credit</td></tr>
+<tr><td>Public shares</td><td><code>GET /public/shares/{token}</code> · <code>/{token}/file</code> · <code>/{token}/comments</code> (GET/POST)</td><td>Xem link chia sẻ, tải file, bình luận ghim (rate limit IP)</td></tr>
+</table>
+
+<h2>4. Luồng dữ liệu điển hình (end-to-end)</h2>
+<div class="flow">
+<b>Tải lên → OCR → chat:</b> Chọn PDF → POST upload → lưu đĩa + DB → bấm OCR → Gemini → text lưu kết quả → mở Chat, chọn tài liệu → ngữ cảnh = text đã trích → Gemini trả lời → credit trừ dần theo từng lượt.
+</div>
+<div class="flow">
+<b>Nạp credit end-to-end:</b> Mua credit → tạo đơn (PENDING) → QR SePay → chuyển khoản → webhook xác thực → đơn PAID + cộng credit → app cập nhật số dư → dùng tiếp tính năng AI.
+</div>
+<div class="flow">
+<b>Chia sẻ end-to-end:</b> Menu ⋮ của file → Chia sẻ → chọn trang/hết hạn/mật khẩu → tạo link → gửi link cho người khác → họ mở trình duyệt (không cần tài khoản) → xem + bình luận ghim → chủ file đọc và xử lý bình luận.
+</div>
+
+<p class="note">Nguồn: đọc trực tiếp mã nguồn backend/app/api/v1 (router.py + 8 file router), services, README.md, docs/srs-share-links.md, docs/ui-spec-files.md của repo. Sơ đồ luồng viết theo hành vi code thực tế.</p>
+
+</body>
+</html>
