@@ -107,6 +107,14 @@ def _text_reply(text):
     return {"content": [{"type": "text", "text": text}]}
 
 
+def test_voice_tools_define_array_items():
+    tools = voice_command_service._tools()
+    merge = next(tool for tool in tools if tool["name"] == "merge_documents")
+    properties = merge["input_schema"]["properties"]
+    assert properties["names"]["type"] == "array"
+    assert properties["names"]["items"] == {"type": "string"}
+
+
 def test_interpret_returns_action_from_tool_use(monkeypatch):
     captured = {}
 

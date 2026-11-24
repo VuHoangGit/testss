@@ -30,6 +30,12 @@ def upgrade() -> None:
             batch.add_column(
                 sa.Column("credit_period", sa.String(length=7), nullable=False, server_default="")
             )
+            batch.add_column(
+                sa.Column("plan_code", sa.String(length=16), nullable=False, server_default="FREE")
+            )
+            batch.add_column(
+                sa.Column("plan_expires_at", sa.DateTime(timezone=True), nullable=True)
+            )
 
     if not inspector.has_table("pricing_packages"):
         op.create_table(
@@ -39,8 +45,12 @@ def upgrade() -> None:
             sa.Column("name", sa.String(length=120), nullable=False),
             sa.Column("price_vnd", sa.Integer(), nullable=False),
             sa.Column("credits", sa.Integer(), nullable=False),
+            sa.Column("badge", sa.String(length=40), nullable=True),
             sa.Column("active", sa.Boolean(), nullable=False, server_default=sa.true()),
             sa.Column("sort_order", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column(
+                "unlimited", sa.Boolean(), nullable=False, server_default=sa.false()
+            ),
             sa.UniqueConstraint("code", name="uq_pricing_packages_code"),
         )
         op.create_index("ix_pricing_packages_code", "pricing_packages", ["code"], unique=True)
@@ -65,6 +75,7 @@ def upgrade() -> None:
             sa.Column("amount_vnd", sa.Integer(), nullable=False),
             sa.Column("credits", sa.Integer(), nullable=False),
             sa.Column("status", sa.String(length=16), nullable=False, server_default="pending"),
+            sa.Column("plan_code", sa.String(length=16), nullable=False, server_default=""),
             sa.Column("transfer_content", sa.String(length=64), nullable=False),
             sa.Column("qr_url", sa.Text(), nullable=True),
             sa.Column("sepay_transaction_id", sa.String(length=64), nullable=True),

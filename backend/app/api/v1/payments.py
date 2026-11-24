@@ -1,4 +1,4 @@
-"""API thanh toán: gói credit, số dư, đơn nạp + webhook SePay."""
+"""Payments API: subscription plans, credit balance, orders + SePay webhook."""
 
 import hashlib
 import logging
@@ -47,21 +47,25 @@ def _parse_authorization(header: str | None) -> tuple[str, str | None]:
 
 @router.get("/pricing", response_model=list[PackageOut])
 def list_pricing(db: DbSession, current: CurrentUser) -> list[PackageOut]:
-    """Danh sách gói credit đang bán."""
+    """List the subscription plans shown on the pricing screen."""
     return payment_service.list_packages(db)
 
 
 @router.get("/credits", response_model=CreditBalanceOut)
 def get_credits(db: DbSession, current: CurrentUser) -> CreditBalanceOut:
-    """Số dư credit của user (reset 300 free đầu tháng, lazy)."""
+    """The user's credit balance: monthly plan quota + legacy purchased credits."""
     settings = get_settings()
     credit_service.ensure_monthly_refresh(db, current)
+    plan = credit_service.effective_plan(current)
     return CreditBalanceOut(
         free=current.credit_free,
         purchased=current.credit_purchased,
         total=current.credit_free + current.credit_purchased,
-        monthly_free=settings.credit_monthly_free,
+        monthly_free=credit_service.plan_quota(plan),
         ai_cost=settings.credit_cost_ai,
+        plan_code=plan,
+        unlimited=plan == "MAX",
+        plan_expires_at=current.plan_expires_at if plan != "FREE" else None,
     )
 
 
@@ -74,7 +78,7 @@ def get_credits(db: DbSession, current: CurrentUser) -> CreditBalanceOut:
 def create_order(
     body: CreateOrderRequest, db: DbSession, current: CurrentUser
 ) -> OrderOut:
-    """Tạo đơn nạp: trả mã đơn + nội dung chuyển khoản + QR để thanh toán."""
+    """Create an order: returns the code + transfer content + QR to pay."""
     try:
         order = payment_service.create_order(db, current, body.code.strip())
     except payment_service.PackageNotFoundError as exc:

@@ -395,7 +395,7 @@ def test_ocr_failure_refunds_credit(
     credits = client.get(
         "/api/v1/payments/credits", headers={"Authorization": f"Bearer {token}"}
     )
-    assert credits.json()["total"] == get_settings().credit_monthly_free
+    assert credits.json()["total"] == get_settings().plan_quota_free
 
 
 # ---------------------------------------------------------------------------

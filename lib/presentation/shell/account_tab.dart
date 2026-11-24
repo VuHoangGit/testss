@@ -81,7 +81,7 @@ class AccountTab extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 14),
-          _sectionTitle(context, 'Credits'),
+          _sectionTitle(context, 'Plan & credits'),
           _CreditsCard(userEmail: userEmail),
           const SizedBox(height: 14),
           _sectionTitle(context, 'Preferences'),
@@ -156,7 +156,7 @@ class AccountTab extends ConsumerWidget {
   );
 }
 
-/// Số dư credit + lối vào mua credit / lịch sử thanh toán.
+/// Plan + credit balance, with links to the pricing screen / payment history.
 class _CreditsCard extends ConsumerWidget {
   const _CreditsCard({required this.userEmail});
 
@@ -165,15 +165,42 @@ class _CreditsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final AsyncValue<CreditBalance> balance = ref.watch(creditBalanceProvider);
+    final CreditBalance? b = balance.value;
     return Card(
       child: Column(
         children: <Widget>[
+          if (b != null && b.expiringSoon)
+            // Yellow banner: plan expires within 3 days — renew to keep it
+            Container(
+              width: double.infinity,
+              color: Colors.amber.shade100,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber.shade900,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your plan expires in ${b.daysRemaining} day'
+                      '${b.daysRemaining == 1 ? '' : 's'} — renew to keep your benefits',
+                      style: TextStyle(color: Colors.amber.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
               children: <Widget>[
                 Icon(
-                  Icons.toll_outlined,
+                  b?.unlimited == true
+                      ? Icons.all_inclusive
+                      : Icons.toll_outlined,
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(width: 12),
@@ -182,19 +209,33 @@ class _CreditsCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       balance.when(
-                        data: (CreditBalance b) => Text(
-                          '${formatCredits(b.total)} credit',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
+                        data: (CreditBalance b) {
+                          final int? days = b.daysRemaining;
+                          return Text(
+                            days == null
+                                ? 'Plan: ${b.planCode}'
+                                : 'Plan: ${b.planCode} · $days day'
+                                      '${days == 1 ? '' : 's'} left',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          );
+                        },
                         loading: () => const Text('Loading balance…'),
                         error: (Object e, StackTrace _) =>
                             const Text('Could not load the balance'),
                       ),
                       Text(
-                        'Each OCR / translate / chat call: 50 credits · 300 free per month',
+                        b == null
+                            ? 'Each AI call costs credits'
+                            : b.unlimited
+                                  ? 'Unlimited AI usage (fair-use applies)'
+                                  : 'Monthly quota ${formatCredits(b.free)}/'
+                                        '${formatCredits(b.monthlyFree)} · '
+                                        'Purchased ${formatCredits(b.purchased)} '
+                                        '(never expires) · '
+                                        'Per AI call: ${b.aiCost}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -209,17 +250,17 @@ class _CreditsCard extends ConsumerWidget {
             visualDensity: const VisualDensity(vertical: -4),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             leading: Icon(
-              Icons.add_card,
+              Icons.upgrade,
               color: Theme.of(context).colorScheme.primary,
             ),
-            title: const Text('Mua credit'),
+            title: const Text('Plans'),
             subtitle: Text(
-              'Top up via bank transfer QR — credits arrive automatically',
+              'Upgrade or renew via bank transfer QR',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              // Về từ màn nạp → invalidate để số dư cập nhật
+              // Back from the pricing screen → invalidate to refresh the balance
               ref.invalidate(creditBalanceProvider);
               await Navigator.of(context).push<void>(
                 MaterialPageRoute<void>(builder: (_) => const PricingScreen()),

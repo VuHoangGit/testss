@@ -94,8 +94,11 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Scan the QR code or transfer with the exact content below — credits are '
-          'added to your account within seconds.',
+          _order.planCode.isEmpty
+              ? 'Scan the QR code or transfer with the exact content below — '
+                    'credits are added to your account within seconds.'
+              : 'Scan the QR code or transfer with the exact content below — '
+                    'your ${_order.planCode} plan activates within seconds.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
@@ -184,7 +187,11 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'A transfer with the wrong amount or without the order code will not add credits.',
+          _order.planCode.isEmpty
+              ? 'A transfer with the wrong amount or without the order code '
+                    'will not add credits.'
+              : 'A transfer with the wrong amount or without the order code '
+                    'will not activate the plan.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.outline,
@@ -255,7 +262,9 @@ class _OrderScreenState extends ConsumerState<OrderScreen> {
         Text('Payment successful!', style: theme.textTheme.titleLarge),
         const SizedBox(height: 4),
         Text(
-          'Added ${formatCredits(_order.credits)} credits to your account.',
+          _order.planCode.isEmpty
+              ? 'Added ${formatCredits(_order.credits)} credits to your account.'
+              : 'Your ${_order.planCode} plan is active for 30 days.',
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: 24),

@@ -152,6 +152,8 @@ def _tools() -> list[dict[str, object]]:
         for param_name, param_spec in params.items():
             assert isinstance(param_spec, dict)
             prop: dict[str, object] = {"type": param_spec["type"]}
+            if param_spec["type"] == "array":
+                prop["items"] = {"type": "string"}
             if "enum" in param_spec:
                 prop["enum"] = param_spec["enum"]
             if param_name in spec["required"]:  # type: ignore[operator]

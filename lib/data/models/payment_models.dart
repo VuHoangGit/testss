@@ -1,4 +1,4 @@
-/// Model JSON cho payments/credits — backend trả snake_case.
+/// JSON models for payments/plans — the backend speaks snake_case.
 library;
 
 import '../../domain/entities/payment_entities.dart';
@@ -10,6 +10,8 @@ class PricingPackageModel extends PricingPackage {
     required super.name,
     required super.priceVnd,
     required super.credits,
+    super.badge,
+    super.unlimited,
   });
 
   factory PricingPackageModel.fromJson(Map<String, dynamic> json) {
@@ -19,6 +21,8 @@ class PricingPackageModel extends PricingPackage {
       name: json['name'] as String? ?? '',
       priceVnd: (json['price_vnd'] as num?)?.toInt() ?? 0,
       credits: (json['credits'] as num?)?.toInt() ?? 0,
+      badge: json['badge'] as String?,
+      unlimited: json['unlimited'] as bool? ?? false,
     );
   }
 }
@@ -29,6 +33,9 @@ class CreditBalanceModel extends CreditBalance {
     required super.purchased,
     required super.monthlyFree,
     required super.aiCost,
+    super.planCode,
+    super.unlimited,
+    super.planExpiresAt,
   });
 
   factory CreditBalanceModel.fromJson(Map<String, dynamic> json) {
@@ -37,6 +44,11 @@ class CreditBalanceModel extends CreditBalance {
       purchased: (json['purchased'] as num?)?.toInt() ?? 0,
       monthlyFree: (json['monthly_free'] as num?)?.toInt() ?? 0,
       aiCost: (json['ai_cost'] as num?)?.toInt() ?? 0,
+      planCode: json['plan_code'] as String? ?? 'FREE',
+      unlimited: json['unlimited'] as bool? ?? false,
+      planExpiresAt: json['plan_expires_at'] == null
+          ? null
+          : DateTime.tryParse(json['plan_expires_at'] as String),
     );
   }
 }
@@ -50,6 +62,7 @@ class PaymentOrderModel extends PaymentOrder {
     required super.credits,
     required super.transferContent,
     required super.createdAt,
+    super.planCode,
     super.qrUrl,
     super.paidAt,
     super.bankBin,
@@ -65,6 +78,7 @@ class PaymentOrderModel extends PaymentOrder {
       amountVnd: (json['amount_vnd'] as num?)?.toInt() ?? 0,
       credits: (json['credits'] as num?)?.toInt() ?? 0,
       transferContent: json['transfer_content'] as String? ?? '',
+      planCode: json['plan_code'] as String? ?? '',
       qrUrl: json['qr_url'] as String?,
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),

@@ -110,16 +110,14 @@ def _is_google_settings(settings) -> bool:
 def _google_model_name(model: str) -> str:
     """Tên model Gemini dùng cho URL `models/{model}:generateContent`.
 
-    Model lỗi thời bị Google đóng với người dùng mới (404 "no longer available
-    to new users") nên luôn đổi về họ 3.8. Key AI Studio (AQ.*) hiện chỉ được
-    cấp phép `gemini-3.8-flash` — không có bản "pro" cho key này — nên mọi
-    tên claude/ten khác đều chuyển về flash. Nếu .env đã đặt tên `gemini-*`
-    thì giữ nguyên để người dùng tự chọn phiên bản.
+    Model lỗi thời được đổi sang model flash đã xác nhận hoạt động cho key
+    AI Studio (AQ.*). Nếu .env đã đặt tên `gemini-*` thì giữ nguyên để người
+    dùng tự chọn phiên bản.
     """
     lowered = model.lower()
     if lowered.startswith("gemini-"):
         return model
-    return "gemini-3.8-flash"
+    return "gemini-3-flash-preview"
 
 
 def _tools_for_gemini(tools: object) -> list[dict[str, object]]:
@@ -132,10 +130,28 @@ def _tools_for_gemini(tools: object) -> list[dict[str, object]]:
     for tool in tools or []:  # type: ignore[union-attr]
         if not isinstance(tool, dict):
             continue
+        input_schema = tool.get("input_schema")
+        parameters = (
+            dict(input_schema)
+            if isinstance(input_schema, dict)
+            else {"type": "object", "properties": {}}
+        )
+        properties = parameters.get("properties")
+        if isinstance(properties, dict):
+            normalized_properties: dict[str, object] = {}
+            for name, schema in properties.items():
+                if not isinstance(schema, dict):
+                    normalized_properties[name] = schema
+                    continue
+                normalized = dict(schema)
+                if normalized.get("type") == "array" and "items" not in normalized:
+                    normalized["items"] = {"type": "string"}
+                normalized_properties[name] = normalized
+            parameters["properties"] = normalized_properties
         declarations.append({
             "name": tool.get("name"),
             "description": tool.get("description"),
-            "parameters": tool.get("input_schema") or {"type": "object"},
+            "parameters": parameters or {"type": "object"},
         })
     return declarations
 
@@ -181,6 +197,10 @@ def _to_google_payload(payload: dict[str, object]) -> dict[str, object]:
         config["temperature"] = payload["temperature"]
         if payload["temperature"] == 0:
             config["thinkingConfig"] = {"thinkingBudget": 0}
+    if "thinkingConfig" not in config:
+        # Gemini 3 có thể dùng hết output budget cho phần suy luận. Tắt
+        # thinking mặc định để các chức năng text/voice luôn nhận câu trả lời.
+        config["thinkingConfig"] = {"thinkingBudget": 0}
     tools = payload.get("tools")
     if tools:
         declarations = _tools_for_gemini(tools)

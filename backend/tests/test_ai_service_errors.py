@@ -253,11 +253,20 @@ def test_google_adapter_translates_payload_and_response():
     assert blocks[1]["input"] == {"name": "Hóa đơn"}
 
 
+def test_google_adapter_disables_thinking_without_temperature():
+    google_body = ai_service._to_google_payload({
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": "Reply with OK only"}],
+    })
+
+    assert google_body["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
+
+
 def test_google_adapter_maps_model_names():
-    """haiku/sonnet/opus → flash (key AQ.* chỉ được cấp flash), gemini-* giữ nguyên."""
-    assert ai_service._google_model_name("claude-haiku-4-5") == "gemini-3.8-flash"
-    assert ai_service._google_model_name("claude-sonnet-4-5") == "gemini-3.8-flash"
-    assert ai_service._google_model_name("claude-opus-4-5") == "gemini-3.8-flash"
+    """haiku/sonnet/opus → flash hoạt động, gemini-* giữ nguyên."""
+    assert ai_service._google_model_name("claude-haiku-4-5") == "gemini-3-flash-preview"
+    assert ai_service._google_model_name("claude-sonnet-4-5") == "gemini-3-flash-preview"
+    assert ai_service._google_model_name("claude-opus-4-5") == "gemini-3-flash-preview"
     assert ai_service._google_model_name("gemini-2.0-flash") == "gemini-2.0-flash"
 
 

@@ -70,9 +70,20 @@ class Settings(BaseSettings):
     sepay_bank_bin: str = "MB"  # mã ngân hàng cho VietQR (MB Bank)
     sepay_account_name: str = ""
 
-    # Credit AI: free mỗi tháng và giá mỗi lượt gọi tính năng AI.
-    credit_monthly_free: int = 300
+    # AI credits: price of one AI call + monthly quota per subscription plan.
+    # Each quota is env-tunable (PLAN_QUOTA_PLUS=1500...) without a code deploy;
+    # plan prices live in the pricing_packages seed instead.
     credit_cost_ai: int = 50
+    plan_quota_free: int = 300
+    plan_quota_plus: int = 1_000
+    plan_quota_pro: int = 2_500
+    plan_quota_max: int = 10_000
+    # Plan length in days (bought via SePay; renewing early stacks the days).
+    plan_period_days: int = 30
+    # Fair-use guards for the Max plan (shown as "Unlimited" in the UI):
+    # a monthly credit ceiling plus a max number of AI calls per hour.
+    max_unlimited_monthly_credits: int = 10_000
+    unlimited_hourly_calls: int = 20
     # Origin web dùng ghép URL chia sẻ ({base}/?share={token}). Cấu hình đúng
     # domain production; dev giữ mặc định localhost.
     public_web_base_url: str = "http://localhost:53123"

@@ -18,10 +18,10 @@ from app.db.session import engine  # noqa: E402
 from app.models.payment import PaymentOrder, PricingPackage  # noqa: E402
 from app.services import payment_service  # noqa: E402
 
-# Cột credit mới trên bảng users — user cũ được tặng đúng 300 free kỳ này,
+# Cột credit mới trên bảng users — user cũ được tặng đúng 500 free kỳ này,
 # credit_period rỗng → lần đọc/charge đầu tiên tự ghi kỳ hiện tại.
 _USER_COLUMNS: dict[str, str] = {
-    "credit_free": "ALTER TABLE users ADD COLUMN credit_free INTEGER NOT NULL DEFAULT 300",
+    "credit_free": "ALTER TABLE users ADD COLUMN credit_free INTEGER NOT NULL DEFAULT 500",
     "credit_purchased": "ALTER TABLE users ADD COLUMN credit_purchased INTEGER NOT NULL DEFAULT 0",
     "credit_period": "ALTER TABLE users ADD COLUMN credit_period VARCHAR(7) NOT NULL DEFAULT ''",
 }

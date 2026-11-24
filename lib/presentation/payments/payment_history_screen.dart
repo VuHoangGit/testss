@@ -32,7 +32,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'No transactions yet.\nTop up credits under "Buy credits".',
+                    'No transactions yet.\nBuy a plan under "Plans".',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -96,7 +96,9 @@ class _OrderTile extends StatelessWidget {
           ),
         ),
         title: Text(
-          '${formatCredits(order.credits)} credit · ${formatVnd(order.amountVnd)}',
+          order.planCode.isEmpty
+              ? '${formatCredits(order.credits)} credit · ${formatVnd(order.amountVnd)}'
+              : '${order.planCode} plan · 30 days · ${formatVnd(order.amountVnd)}',
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         subtitle: Text(

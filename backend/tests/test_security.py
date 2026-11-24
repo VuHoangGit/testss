@@ -214,7 +214,7 @@ class TestSepayWebhookAccount:
         headers = _headers(make_token, "sub-pay", "pay@gmail.com")
         with _env(SEPAY_WEBHOOK_SECRET="test-secret", SEPAY_BANK_ACCOUNT="0123456789"):
             order = client.post(
-                "/api/v1/payments/orders", headers=headers, json={"code": "P50"}
+                "/api/v1/payments/orders", headers=headers, json={"code": "PLUS"}
             ).json()
             response = client.post(
                 "/api/v1/payments/sepay/webhook",
