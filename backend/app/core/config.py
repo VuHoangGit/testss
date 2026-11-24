@@ -33,7 +33,10 @@ class Settings(BaseSettings):
     documents_dir: str = ""
     # Thư mục chứa các biểu mẫu (.doc/.docx/.pdf) cho tab "Biểu mẫu".
     # Thêm/xóa file trong thư mục là được, không cần upload/sửa database.
-    form_templates_dir: str = r"C:\Users\hoang\Downloads\New folder"
+    # Mặc định: form_templates/ trong repo — bám theo thư mục làm việc hiện
+    # hành; deploy (Render) đặt FORM_TEMPLATES_DIR=/app/form_templates qua
+    # biến môi trường, dev trỏ thư mục ngoài repo qua .env nếu muốn.
+    form_templates_dir: str = "form_templates"
     # Giới hạn dung lượng 1 file upload (MB)
     max_upload_mb: int = 50
     # Loại file được phép upload (theo đuôi, phân cách bằng dấu phẩy). MIME do

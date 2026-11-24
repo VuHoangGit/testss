@@ -1,0 +1,30 @@
+# Render Blueprint — deploy the DocuVault backend as a Docker web service.
+# Docs: https://render.com/docs/blueprint-spec
+#
+# AFTER first deploy: set these env vars in the Render dashboard
+# (Environment tab) — see docs/deploy-render.md for the full list:
+#   DATABASE_URL, SUPABASE_URL, ANTHROPIC_*, SEPAY_*, ENVIRONMENT,
+#   TRUSTED_HOSTS, CORS_ORIGINS, PUBLIC_WEB_BASE_URL, FORM_TEMPLATES_DIR
+services:
+  - type: web
+    name: docuvault-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    rootDir: backend
+    plan: free
+    healthCheckPath: /openapi.json
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: FORM_TEMPLATES_DIR
+        value: /app/form_templates
+      - key: DATABASE_URL
+        sync: false  # paste the Supabase pooler URI in the dashboard
+      - key: SUPABASE_URL
+        sync: false
+      - key: ANTHROPIC_AUTH_TOKEN
+        sync: false
+      - key: SEPAY_WEBHOOK_SECRET
+        sync: false
+      - key: SEPAY_BANK_ACCOUNT
+        sync: false
