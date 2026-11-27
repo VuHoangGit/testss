@@ -86,6 +86,51 @@ def preview_document(
     )
 
 
+@router.post("/preview-upload")
+async def preview_upload(
+    current: CurrentUser,
+    file: Annotated[UploadFile, File()],
+    page: int = 0,
+) -> Response:
+    """Render 1 trang của TỆP NGƯỜI DÙNG ĐÍNH KÈM thành PNG.
+
+    Dùng cho việc kéo thả logo trên tệp do người dùng tải lên (không phải biểu
+    mẫu có sẵn trong ``form_templates/``). Tệp chỉ sống trong thư mục tạm.
+    """
+    del current
+    if page < 0:
+        raise HTTPException(status_code=422, detail="Số trang không hợp lệ")
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
+    try:
+        data = await file.read()
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Tệp đính kèm vượt quá {get_settings().max_upload_mb} MB",
+            )
+        png, page_count, page_width, page_height = form_service.render_uploaded_page_png(
+            file.filename or "",
+            data,
+            page_number=page,
+        )
+    except (ValueError, RuntimeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    finally:
+        await file.close()
+
+    return Response(
+        content=png,
+        media_type="image/png",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Page-Count": str(page_count),
+            "X-Page-Width-Pt": f"{page_width:.2f}",
+            "X-Page-Height-Pt": f"{page_height:.2f}",
+            "Access-Control-Expose-Headers": "X-Page-Count, X-Page-Width-Pt, X-Page-Height-Pt",
+        },
+    )
+
+
 @router.post("/process")
 async def process_form(
     current: CurrentUser,
@@ -93,11 +138,13 @@ async def process_form(
     logo: Annotated[UploadFile | None, File()] = None,
     logo_placements: Annotated[str | None, Form()] = None,
     template_names: Annotated[list[str] | None, Form()] = None,
+    template_files: Annotated[list[UploadFile] | None, File()] = None,
     template_name: str | None = None,
     x: Annotated[float, Form(ge=0.0, le=1.0)] = 0.82,
     y: Annotated[float, Form(ge=0.0, le=1.0)] = 0.04,
     is_watermark: Annotated[bool, Form()] = False,
     password: Annotated[str | None, Form()] = None,
+    output_format: Annotated[str | None, Form()] = None,
 ) -> Response:
     del current
     uploaded_logos = logos or ([logo] if logo is not None else [])
@@ -106,11 +153,24 @@ async def process_form(
     for uploaded_logo in uploaded_logos:
         if uploaded_logo.content_type not in {"image/png", "image/jpeg"}:
             raise HTTPException(status_code=415, detail="Logo chỉ hỗ trợ PNG hoặc JPEG")
+    uploaded_template_files = template_files or []
+    max_bytes = get_settings().max_upload_mb * 1024 * 1024
 
     try:
         logo_payloads: list[bytes] = []
         for uploaded_logo in uploaded_logos:
             logo_payloads.append(await uploaded_logo.read())
+
+        # Tệp biểu mẫu do người dùng đính kèm — xử lý ngay, không lưu lại.
+        uploaded_templates: list[tuple[str, bytes]] = []
+        for uploaded_template in uploaded_template_files:
+            data = await uploaded_template.read()
+            if len(data) > max_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Tệp đính kèm vượt quá {get_settings().max_upload_mb} MB",
+                )
+            uploaded_templates.append((uploaded_template.filename or "", data))
 
         placements: list[dict[str, object]] = []
         if logo_placements:
@@ -136,8 +196,8 @@ async def process_form(
             logo_items.append((logo_bytes, logo_x, logo_y, logo_w, logo_h))
 
         names = template_names or ([template_name] if template_name else [])
-        if not names:
-            raise ValueError("Cần ít nhất một template_name hoặc template_names")
+        if not names and not uploaded_templates:
+            raise ValueError("Cần ít nhất một biểu mẫu có sẵn hoặc một tệp đính kèm")
         output_bytes, output_name = form_service.create_output_zip(
             configured_dir=get_settings().form_templates_dir,
             template_names=names,
@@ -147,14 +207,16 @@ async def process_form(
             is_watermark=is_watermark,
             password=password,
             logo_placements=logo_items,
+            uploaded_templates=uploaded_templates,
+            output_format=output_format,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except (ValueError, RuntimeError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     finally:
-        for uploaded_logo in uploaded_logos:
-            await uploaded_logo.close()
+        for uploaded_file in [*uploaded_logos, *uploaded_template_files]:
+            await uploaded_file.close()
 
     return Response(
         content=output_bytes,

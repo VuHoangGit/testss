@@ -20,6 +20,21 @@ SUPPORTED_TEMPLATE_TYPES = {".pdf", ".docx", ".doc"}
 # Placement 3 phần tử (bytes, x, y) — cũ; 5 phần tử (bytes, x, y, w, h) — WYSIWYG.
 LogoPlacement = tuple[bytes, float, float] | tuple[bytes, float, float, float, float]
 
+# Chữ ký đầu tệp — dùng để chặn tệp đính kèm đổi đuôi (vd. .txt → .pdf).
+_PDF_MAGIC = b"%PDF"
+_ZIP_MAGIC = b"PK\x03\x04"  # DOCX là file ZIP (OOXML)
+_OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # .doc nhị phân cũ
+_RTF_MAGIC = b"{\\rtf"  # .doc lưu dạng RTF
+
+# Ký tự không hợp lệ trong tên tệp trên Windows và ký tự điều khiển.
+_INVALID_NAME_CHARS = frozenset('<>:"/\\|?*')
+
+# Định dạng đầu ra người dùng chọn. None = giữ nguyên định dạng tệp gốc.
+OUTPUT_MIME = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 
 def templates_dir(configured_dir: str) -> Path:
     directory = Path(configured_dir).expanduser()
@@ -43,6 +58,18 @@ def list_templates(configured_dir: str) -> list[dict[str, object]]:
     return templates
 
 
+def normalize_output_format(value: str | None) -> str | None:
+    """Chuẩn hoá lựa chọn định dạng xuất. None = giữ nguyên định dạng gốc."""
+    if value is None or not value.strip():
+        return None
+    fmt = value.strip().lower()
+    if fmt == "word":
+        fmt = "docx"
+    if fmt not in OUTPUT_MIME:
+        raise ValueError("Định dạng xuất chỉ hỗ trợ PDF hoặc DOCX")
+    return fmt
+
+
 def resolve_template(configured_dir: str, template_name: str) -> Path:
     directory = templates_dir(configured_dir).resolve()
     candidate = (directory / template_name).resolve()
@@ -53,6 +80,41 @@ def resolve_template(configured_dir: str, template_name: str) -> Path:
     if not candidate.is_file():
         raise FileNotFoundError("Không tìm thấy biểu mẫu")
     return candidate
+
+
+def sanitize_upload_name(raw_name: str | None) -> str:
+    """Chuẩn hoá tên tệp người dùng đính kèm.
+
+    Bỏ mọi thành phần đường dẫn (chặn ``../../etc/passwd``), thay ký tự không
+    hợp lệ trong tên tệp, và chỉ cho 3 đuôi hỗ trợ.
+    """
+    name = (raw_name or "").replace("\\", "/").split("/")[-1].strip()
+    if not name or name in {".", ".."}:
+        raise ValueError("Thiếu tên tệp đính kèm")
+    suffix = Path(name).suffix.lower()
+    if suffix not in SUPPORTED_TEMPLATE_TYPES:
+        raise ValueError("Chỉ hỗ trợ tệp PDF, DOCX hoặc DOC")
+    stem = name[: len(name) - len(suffix)]
+    cleaned = "".join(
+        "_" if char in _INVALID_NAME_CHARS or ord(char) < 32 else char for char in stem
+    ).strip(" .")
+    return f"{cleaned or 'bieu-mau'}{suffix}"
+
+
+def validate_upload(file_name: str | None, file_bytes: bytes) -> tuple[str, bytes]:
+    """Trả (tên an toàn, nội dung) sau khi kiểm tra đuôi và chữ ký đầu tệp."""
+    name = sanitize_upload_name(file_name)
+    if not file_bytes:
+        raise ValueError("Tệp đính kèm rỗng")
+    head = file_bytes[:8]
+    suffix = Path(name).suffix.lower()
+    if suffix == ".pdf" and file_bytes.lstrip()[:4] != _PDF_MAGIC:
+        raise ValueError("Tệp đính kèm không phải PDF hợp lệ")
+    if suffix == ".docx" and not head.startswith(_ZIP_MAGIC):
+        raise ValueError("Tệp đính kèm không phải DOCX hợp lệ")
+    if suffix == ".doc" and not (head == _OLE_MAGIC or head.startswith(_RTF_MAGIC)):
+        raise ValueError("Tệp đính kèm không phải DOC hợp lệ")
+    return name, file_bytes
 
 
 def validate_logo(logo_bytes: bytes) -> tuple[bytes, str]:
@@ -121,6 +183,7 @@ def _convert_doc_to_docx(source: Path, work_dir: Path) -> Path:
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         raise RuntimeError("Thiết bị chưa cài LibreOffice. Cần soffice để chuyển DOC sang DOCX.")
+    work_dir.mkdir(parents=True, exist_ok=True)
     profile = work_dir / "lo-profile"
     profile.mkdir(exist_ok=True)
     command = [
@@ -267,6 +330,73 @@ def _add_logo_to_pdf(
         document.save(str(output), **save_options)
 
 
+def _process_source(
+    *,
+    source: Path,
+    logo_bytes: bytes,
+    x: float = 0.82,
+    y: float = 0.04,
+    is_watermark: bool = False,
+    password: str | None = None,
+    logo_placements: Iterable[LogoPlacement] | None = None,
+    output_format: str | None = None,
+) -> tuple[bytes, str, str]:
+    """Đóng logo lên một tệp nguồn bất kỳ (đã nằm trên đĩa).
+
+    Dùng chung cho biểu mẫu có sẵn trong thư mục cấu hình và tệp người dùng
+    đính kèm — hai đường vào, một đường xử lý.
+
+    ``output_format``: ``None`` giữ nguyên định dạng gốc, hoặc ``"pdf"`` /
+    ``"docx"`` để chuyển đổi. Đổi định dạng luôn đi qua bước trung gian chất
+    lượng cao nhất: DOCX→PDF in bằng LibreOffice rồi đóng logo bằng PyMuPDF
+    (giữ đúng khung kéo thả); PDF→DOCX dựng lại bằng service PDF→Word của dự án.
+    """
+    logo_bytes, _ = validate_logo(logo_bytes)
+    target = normalize_output_format(output_format)
+    suffix = source.suffix.lower()
+    want = target or ("pdf" if suffix == ".pdf" else "docx")
+
+    if target == "docx" and password:
+        raise ValueError("Mật khẩu bảo vệ chỉ áp dụng cho PDF — hãy chọn định dạng xuất PDF")
+
+    with tempfile.TemporaryDirectory(prefix="docuvault-logo-") as temp:
+        work_dir = Path(temp)
+
+        if want == "pdf":
+            # soffice tự nhận .doc lẫn .docx → 1 lần gọi thay vì 2.
+            pdf_source = source if suffix == ".pdf" else _convert_to_pdf(source, work_dir / "pdf")
+            output = work_dir / f"{source.stem}-logo.pdf"
+            _add_logo_to_pdf(
+                pdf_source,
+                logo_bytes,
+                output,
+                x=x,
+                y=y,
+                is_watermark=is_watermark,
+                password=password,
+                logo_placements=logo_placements,
+            )
+            return output.read_bytes(), output.name, OUTPUT_MIME["pdf"]
+
+        if suffix == ".pdf":
+            docx_source = _convert_pdf_to_docx(source, work_dir / "convert")
+        elif suffix == ".doc":
+            docx_source = _convert_doc_to_docx(source, work_dir / "convert")
+        else:
+            docx_source = source
+        output = work_dir / f"{source.stem}-logo.docx"
+        _add_logo_to_docx(
+            docx_source,
+            logo_bytes,
+            output,
+            x=x,
+            y=y,
+            is_watermark=is_watermark,
+            logo_placements=logo_placements,
+        )
+        return output.read_bytes(), output.name, OUTPUT_MIME["docx"]
+
+
 def process_template(
     *,
     configured_dir: str,
@@ -277,47 +407,61 @@ def process_template(
     is_watermark: bool = False,
     password: str | None = None,
     logo_placements: Iterable[LogoPlacement] | None = None,
+    output_format: str | None = None,
 ) -> tuple[bytes, str, str]:
-    """Trả (bytes, tên file, MIME) sau khi tự xóa toàn bộ thư mục tạm."""
-    logo_bytes, _ = validate_logo(logo_bytes)
+    """Biểu mẫu có sẵn trong thư mục cấu hình. Trả (bytes, tên file, MIME)."""
     source = resolve_template(configured_dir, template_name)
+    return _process_source(
+        source=source,
+        logo_bytes=logo_bytes,
+        x=x,
+        y=y,
+        is_watermark=is_watermark,
+        password=password,
+        logo_placements=logo_placements,
+        output_format=output_format,
+    )
 
-    with tempfile.TemporaryDirectory(prefix="docuvault-logo-") as temp:
-        work_dir = Path(temp)
-        if source.suffix.lower() == ".pdf":
-            output = work_dir / f"{source.stem}-logo.pdf"
-            _add_logo_to_pdf(
-                source,
-                logo_bytes,
-                output,
-                x=x,
-                y=y,
-                is_watermark=is_watermark,
-                password=password,
-                logo_placements=logo_placements,
-            )
-            return output.read_bytes(), output.name, "application/pdf"
 
-        if source.suffix.lower() == ".doc":
-            docx_source = _convert_doc_to_docx(source, work_dir)
-            output = work_dir / f"{source.stem}-logo.docx"
-        else:
-            docx_source = source
-            output = work_dir / f"{source.stem}-logo.docx"
-        _add_logo_to_docx(
-            docx_source,
-            logo_bytes,
-            output,
+def process_uploaded_template(
+    *,
+    file_name: str | None,
+    file_bytes: bytes,
+    logo_bytes: bytes,
+    x: float = 0.82,
+    y: float = 0.04,
+    is_watermark: bool = False,
+    password: str | None = None,
+    logo_placements: Iterable[LogoPlacement] | None = None,
+    output_format: str | None = None,
+) -> tuple[bytes, str, str]:
+    """Tệp người dùng đính kèm — chỉ sống trong thư mục tạm, không lưu lại."""
+    name, data = validate_upload(file_name, file_bytes)
+    with tempfile.TemporaryDirectory(prefix="docuvault-upload-") as temp:
+        source = Path(temp) / name
+        source.write_bytes(data)
+        return _process_source(
+            source=source,
+            logo_bytes=logo_bytes,
             x=x,
             y=y,
             is_watermark=is_watermark,
+            password=password,
             logo_placements=logo_placements,
+            output_format=output_format,
         )
-        return (
-            output.read_bytes(),
-            output.name,
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        )
+
+
+def _unique_entry_name(candidate: str, taken: Iterable[str]) -> str:
+    """Tránh trùng tên trong ZIP (vd. ``a.doc`` và ``a.docx`` cùng ra ``a-logo.docx``)."""
+    used = set(taken)
+    if candidate not in used:
+        return candidate
+    path = Path(candidate)
+    counter = 2
+    while f"{path.stem}-{counter}{path.suffix}" in used:
+        counter += 1
+    return f"{path.stem}-{counter}{path.suffix}"
 
 
 def create_output_zip(
@@ -329,9 +473,18 @@ def create_output_zip(
     is_watermark: bool = False,
     password: str | None = None,
     logo_placements: Iterable[LogoPlacement] | None = None,
+    uploaded_templates: Iterable[tuple[str | None, bytes]] | None = None,
+    output_format: str | None = None,
 ) -> tuple[bytes, str]:
+    """Đóng logo lên nhiều biểu mẫu rồi gói thành 1 ZIP.
+
+    ``template_names`` là biểu mẫu có sẵn trong thư mục cấu hình;
+    ``uploaded_templates`` là (tên tệp, nội dung) do người dùng đính kèm.
+    """
     validate_logo(logo_bytes)
-    if not template_names:
+    normalize_output_format(output_format)
+    uploads = list(uploaded_templates or ())
+    if not template_names and not uploads:
         raise ValueError("Cần ít nhất một biểu mẫu")
     if len(template_names) != len(set(template_names)):
         raise ValueError("Danh sách biểu mẫu có tên trùng")
@@ -350,8 +503,24 @@ def create_output_zip(
                     is_watermark=is_watermark,
                     password=password,
                     logo_placements=logo_placements,
+                    output_format=output_format,
                 )
-                archive.writestr(output_name, output_bytes)
+                name = _unique_entry_name(output_name, archive.namelist())
+                archive.writestr(name, output_bytes)
+            for upload_name, upload_bytes in uploads:
+                output_bytes, output_name, _ = process_uploaded_template(
+                    file_name=upload_name,
+                    file_bytes=upload_bytes,
+                    logo_bytes=logo_bytes,
+                    x=x,
+                    y=y,
+                    is_watermark=is_watermark,
+                    password=password,
+                    logo_placements=logo_placements,
+                    output_format=output_format,
+                )
+                name = _unique_entry_name(output_name, archive.namelist())
+                archive.writestr(name, output_bytes)
         return zip_path.read_bytes(), zip_path.name
 
 
@@ -363,19 +532,18 @@ def create_template_preview(configured_dir: str, template_name: str) -> bytes:
     with tempfile.TemporaryDirectory(prefix="docuvault-preview-") as temp:
         work_dir = Path(temp)
         docx_source = (
-            _convert_doc_to_docx(source, work_dir)
-            if source.suffix.lower() == ".doc"
-            else source
+            _convert_doc_to_docx(source, work_dir) if source.suffix.lower() == ".doc" else source
         )
-        preview = _docx_to_pdf(docx_source, work_dir)
+        preview = _convert_to_pdf(docx_source, work_dir)
         return preview.read_bytes()
 
 
-def _docx_to_pdf(docx_source: Path, work_dir: Path) -> Path:
-    """Chuyển DOCX sang PDF bằng LibreOffice headless, trả về path file PDF."""
+def _convert_to_pdf(source: Path, work_dir: Path) -> Path:
+    """In DOC/DOCX ra PDF bằng LibreOffice headless, trả về path file PDF."""
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
         raise RuntimeError("Thiết bị chưa cài LibreOffice để tạo preview")
+    work_dir.mkdir(parents=True, exist_ok=True)
     profile = work_dir / "lo-profile"
     profile.mkdir(exist_ok=True)
     result = subprocess.run(
@@ -387,7 +555,7 @@ def _docx_to_pdf(docx_source: Path, work_dir: Path) -> Path:
             "pdf",
             "--outdir",
             str(work_dir),
-            str(docx_source),
+            str(source),
         ],
         capture_output=True,
         text=True,
@@ -396,10 +564,24 @@ def _docx_to_pdf(docx_source: Path, work_dir: Path) -> Path:
     )
     if result.returncode != 0:
         raise RuntimeError(result.stderr or "Không thể tạo preview PDF")
-    preview = work_dir / f"{docx_source.stem}.pdf"
+    preview = work_dir / f"{source.stem}.pdf"
     if not preview.is_file():
         raise RuntimeError("Không tạo được preview PDF")
     return preview
+
+
+def _convert_pdf_to_docx(source: Path, work_dir: Path) -> Path:
+    """Chuyển PDF sang DOCX bằng service PDF→Word có sẵn của dự án."""
+    from app.services import pdf_to_docx_service
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    docx_bytes = pdf_to_docx_service.export_pdf_to_docx(
+        source.read_bytes(),
+        title=source.stem,
+    )
+    converted = work_dir / f"{source.stem}.docx"
+    converted.write_bytes(docx_bytes)
+    return converted
 
 
 def render_page_png(
@@ -414,20 +596,37 @@ def render_page_png(
     tính theo point (72 dpi) để frontend suy ra tỉ lệ và đặt logo đúng chỗ.
     """
     source = resolve_template(configured_dir, template_name)
+    with tempfile.TemporaryDirectory(prefix="docuvault-pageimg-") as temp:
+        return _render_source_page(source, Path(temp), page_number, zoom)
+
+
+def render_uploaded_page_png(
+    file_name: str | None,
+    file_bytes: bytes,
+    page_number: int = 0,
+    zoom: float = 2.0,
+) -> tuple[bytes, int, float, float]:
+    """Render 1 trang của tệp NGƯỜI DÙNG ĐÍNH KÈM thành PNG (nền kéo thả logo)."""
+    name, data = validate_upload(file_name, file_bytes)
+    with tempfile.TemporaryDirectory(prefix="docuvault-pageimg-upload-") as temp:
+        work_dir = Path(temp)
+        source = work_dir / name
+        source.write_bytes(data)
+        return _render_source_page(source, work_dir, page_number, zoom)
+
+
+def _render_source_page(
+    source: Path,
+    work_dir: Path,
+    page_number: int,
+    zoom: float,
+) -> tuple[bytes, int, float, float]:
+    """PDF thì render thẳng; DOCX/DOC phải qua LibreOffice in ra PDF trước."""
     suffix = source.suffix.lower()
     if suffix == ".pdf":
-        pdf_path = source
-    else:
-        with tempfile.TemporaryDirectory(prefix="docuvault-pageimg-") as temp:
-            work_dir = Path(temp)
-            docx_source = (
-                _convert_doc_to_docx(source, work_dir)
-                if suffix == ".doc"
-                else source
-            )
-            pdf_path = _docx_to_pdf(docx_source, work_dir)
-            return _render_pdf_page(pdf_path, page_number, zoom)
-
+        return _render_pdf_page(source, page_number, zoom)
+    docx_source = _convert_doc_to_docx(source, work_dir / "convert") if suffix == ".doc" else source
+    pdf_path = _convert_to_pdf(docx_source, work_dir / "pdf")
     return _render_pdf_page(pdf_path, page_number, zoom)
 
 

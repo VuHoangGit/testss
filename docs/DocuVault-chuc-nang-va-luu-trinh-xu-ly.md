@@ -61,7 +61,9 @@ Mỗi lần sửa/tạo lại file, backend lưu snapshot vào `document_version
 ### 2.8. Biểu mẫu — gắn logo (WYSIWYG)
 
 - **Xem mẫu:** `GET /forms/templates` (danh sách biểu mẫu sẵn trong thư mục cấu hình) → preview PDF hoặc ảnh từng trang (`/page-image` trả PNG + số trang, kích thước điểm ảnh làm nền kéo-thả).
-- **Đặt logo:** kéo logo PNG/JPEG lên trang (tọa độ %) → `POST /forms/process` (multipart: logos + placements + tùy chọn watermark, mật khẩu) → backend dựng file mới (DOC→DOCX qua LibreOffice nếu cần) → chèn logo → trả file tải về.
+- **Tệp của người dùng:** người dùng đính kèm PDF/DOCX/DOC của riêng mình (nút "Tải tệp của bạn"). Tệp chỉ nằm trong RAM máy khách + thư mục tạm của backend, **không** ghi vào `form_templates/`. Preview từng trang qua `POST /forms/preview-upload` (multipart `file` + `page`, trả PNG kèm `X-Page-Count/Width/Height`). Tên tệp được chuẩn hoá (bỏ đường dẫn, thay ký tự cấm) và kiểm tra chữ ký đầu tệp (`%PDF`, `PK`, OLE/RTF) để chặn đổi đuôi.
+- **Đặt logo:** kéo logo PNG/JPEG lên trang (tọa độ %) → `POST /forms/process` (multipart: `logos` + `logo_placements` + `template_names` và/hoặc `template_files`, tùy chọn `is_watermark`, `password`, `output_format`) → backend dựng file mới → chèn logo → trả ZIP.
+- **Định dạng xuất (`output_format`):** bỏ trống = giữ nguyên định dạng gốc; `pdf` / `docx` = chuyển đổi. DOCX→PDF in bằng LibreOffice rồi đóng logo bằng PyMuPDF (giữ đúng khung kéo thả); PDF→DOCX dùng lại service PDF→Word (`pdf_to_docx_service`). Mật khẩu bảo vệ chỉ áp dụng cho PDF nên chọn Word + mật khẩu sẽ báo lỗi 422.
 
 ## 3. Tóm tắt API backend (theo router)
 
@@ -76,7 +78,7 @@ Mỗi lần sửa/tạo lại file, backend lưu snapshot vào `document_version
 | AI | `POST /ai/ocr/{id}` (+`/word`), `GET /extract-text/{id}` | Nhận dạng chữ (Gemini), trích text |
 | | `POST /ai/translate`, `POST /ai/chat`, `/conversations…` | Dịch, chat RAG + quản lý hội thoại |
 | | `POST /ai/voice-command` | Phân tích lệnh giọng nói → action |
-| Forms | `GET /forms/templates…`, `POST /forms/process` | Danh sách/preview biểu mẫu, chèn logo vào file |
+| Forms | `GET /forms/templates…`, `POST /forms/preview-upload`, `POST /forms/process` | Danh sách/preview biểu mẫu (có sẵn hoặc tệp người dùng đính kèm), chèn logo, chọn định dạng xuất |
 | Payments | `GET /pricing·credits·orders`, `POST /sepay/webhook` | Gói credit, số dư, đơn nạp, webhook cộng credit |
 | Public shares | `GET /public/shares/{token}` · `/{token}/file` · `/{token}/comments` (GET/POST) | Xem link chia sẻ, tải file, bình luận ghim (rate limit IP) |
 

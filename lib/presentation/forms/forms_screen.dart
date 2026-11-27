@@ -17,10 +17,16 @@ class FormTemplateItem {
     required this.name,
     required this.sizeBytes,
     required this.type,
+    this.bytes,
   });
   final String name;
   final int sizeBytes;
   final String type;
+
+  /// Khác null = tệp người dùng đính kèm (giữ trong RAM, không lưu lên server).
+  final Uint8List? bytes;
+
+  bool get isUploaded => bytes != null;
 }
 
 /// Vị trí logo chuẩn hóa (0–1) theo trang PDF: (x, y) là góc trên-trái,
@@ -69,6 +75,7 @@ class _FormsState {
     this.previewAspect = 1 / 1.414,
     this.isWatermark = false,
     this.password,
+    this.outputFormat,
   });
 
   final FormProcessStatus status;
@@ -85,6 +92,9 @@ class _FormsState {
   final bool isWatermark;
   final String? password;
 
+  /// null = giữ nguyên định dạng gốc; 'pdf' / 'docx' = chuyển đổi khi xuất.
+  final String? outputFormat;
+
   _FormsState copyWith({
     FormProcessStatus? status,
     List<FormTemplateItem>? templates,
@@ -99,6 +109,7 @@ class _FormsState {
     double? previewAspect,
     bool? isWatermark,
     String? password,
+    Object? outputFormat = _sentinel,
   }) {
     return _FormsState(
       status: status ?? this.status,
@@ -120,6 +131,9 @@ class _FormsState {
       previewAspect: previewAspect ?? this.previewAspect,
       isWatermark: isWatermark ?? this.isWatermark,
       password: password ?? this.password,
+      outputFormat: outputFormat == _sentinel
+          ? this.outputFormat
+          : outputFormat as String?,
     );
   }
 
@@ -138,6 +152,12 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
   );
   final List<_LogoPlacement> _logos = <_LogoPlacement>[];
   int _activeLogoIndex = 0;
+
+  /// Tệp do người dùng tự đính kèm — giữ trong RAM, dùng như biểu mẫu.
+  final List<FormTemplateItem> _uploadedTemplates = <FormTemplateItem>[];
+
+  /// Biểu mẫu đang hiện preview (để chuyển trang mà không cần tra tên).
+  FormTemplateItem? _previewItem;
 
   @override
   void initState() {
@@ -175,7 +195,7 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
         );
       });
       if (templates.isNotEmpty) {
-        await _loadPreviewPage(templates.first.name, 0);
+        await _loadPreviewPage(templates.first, 0);
       }
     } on DioException catch (error) {
       if (!mounted) return;
@@ -188,21 +208,39 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
     }
   }
 
-  Future<void> _loadPreviewPage(String templateName, int page) async {
+  Future<void> _loadPreviewPage(FormTemplateItem template, int page) async {
     setState(
       () =>
           _state = _state.copyWith(status: FormProcessStatus.loadingTemplates),
     );
+    final Options options = Options(
+      responseType: ResponseType.bytes,
+      receiveTimeout: const Duration(minutes: 2),
+    );
     try {
-      final Response<List<int>> response = await ref
-          .read(apiDioProvider)
-          .get<List<int>>(
-            '/forms/preview-document?template_name=${Uri.encodeQueryComponent(templateName)}&page=$page',
-            options: Options(
-              responseType: ResponseType.bytes,
-              receiveTimeout: const Duration(minutes: 2),
-            ),
-          );
+      final Response<List<int>> response;
+      if (template.isUploaded) {
+        // Tệp người dùng: gửi lại file mỗi lần đổi trang (server không lưu).
+        response = await ref
+            .read(apiDioProvider)
+            .post<List<int>>(
+              '/forms/preview-upload?page=$page',
+              data: FormData.fromMap(<String, dynamic>{
+                'file': MultipartFile.fromBytes(
+                  template.bytes!,
+                  filename: template.name,
+                ),
+              }),
+              options: options,
+            );
+      } else {
+        response = await ref
+            .read(apiDioProvider)
+            .get<List<int>>(
+              '/forms/preview-document?template_name=${Uri.encodeQueryComponent(template.name)}&page=$page',
+              options: options,
+            );
+      }
       final int pageCount =
           int.tryParse(response.headers.value('x-page-count') ?? '') ?? 1;
       final double pageW =
@@ -212,11 +250,12 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
           double.tryParse(response.headers.value('x-page-height-pt') ?? '') ??
           842.0;
       if (!mounted) return;
+      _previewItem = template;
       setState(() {
         _state = _state.copyWith(
           status: FormProcessStatus.idle,
           previewImage: Uint8List.fromList(response.data ?? <int>[]),
-          previewTemplateName: templateName,
+          previewTemplateName: template.name,
           previewPage: page,
           previewPageCount: pageCount,
           previewAspect: pageH > 0 ? pageW / pageH : 1 / 1.414,
@@ -233,6 +272,64 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
         );
       });
     }
+  }
+
+  /// Người dùng đính kèm tệp PDF/DOCX/DOC của mình để dùng như biểu mẫu.
+  Future<void> _pickTemplates() async {
+    final List<PlatformFile> picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: <String>['pdf', 'docx', 'doc'],
+    );
+    if (picked.isEmpty) return;
+    final List<FormTemplateItem> added = <FormTemplateItem>[];
+    for (final PlatformFile file in picked) {
+      final String lower = file.name.toLowerCase();
+      final String type = lower.endsWith('.pdf')
+          ? 'pdf'
+          : lower.endsWith('.docx')
+          ? 'docx'
+          : lower.endsWith('.doc')
+          ? 'doc'
+          : '';
+      if (type.isEmpty) continue;
+      final Uint8List bytes = await file.readAsBytes();
+      added.add(
+        FormTemplateItem(
+          name: file.name,
+          sizeBytes: bytes.length,
+          type: type,
+          bytes: bytes,
+        ),
+      );
+    }
+    if (!mounted || added.isEmpty) return;
+    setState(() {
+      _uploadedTemplates.addAll(added);
+      _state = _state.copyWith(
+        status: FormProcessStatus.idle,
+        selectedTemplates: <FormTemplateItem>{
+          ..._state.selectedTemplates,
+          ...added,
+        },
+        message: null,
+      );
+    });
+    await _loadPreviewPage(added.first, 0);
+  }
+
+  void _removeUploaded(FormTemplateItem item) {
+    setState(() {
+      _uploadedTemplates.remove(item);
+      _state = _state.copyWith(
+        selectedTemplates: <FormTemplateItem>{}
+          ..addAll(_state.selectedTemplates)
+          ..remove(item),
+      );
+      if (identical(_previewItem, item)) {
+        _previewItem = null;
+        _state = _state.copyWith(previewImage: null);
+      }
+    });
   }
 
   /// Đọc kích thước gốc của ảnh (không giải mã toàn bộ) để đặt tỉ lệ logo khớp.
@@ -296,9 +393,21 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
   }
 
   Future<void> _process() async {
-    final Set<FormTemplateItem> templates = _state.selectedTemplates;
+    final List<FormTemplateItem> selected = <FormTemplateItem>[
+      for (final FormTemplateItem template in _state.templates)
+        if (_state.selectedTemplates.contains(template)) template,
+      ..._uploadedTemplates.where(_state.selectedTemplates.contains),
+    ];
+    final List<String> serverNames = <String>[
+      for (final FormTemplateItem template in selected)
+        if (!template.isUploaded) template.name,
+    ];
+    final List<FormTemplateItem> uploads = <FormTemplateItem>[
+      for (final FormTemplateItem template in selected)
+        if (template.isUploaded) template,
+    ];
     final List<_LogoPlacement> logos = List<_LogoPlacement>.of(_logos);
-    if (templates.isEmpty || logos.isEmpty) {
+    if (selected.isEmpty || logos.isEmpty) {
       setState(() {
         _state = _state.copyWith(
           status: FormProcessStatus.error,
@@ -337,12 +446,16 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
               'h': logo.h,
             },
         ]),
-        'template_names': <String>[
-          for (final FormTemplateItem template in templates) template.name,
-        ],
+        if (serverNames.isNotEmpty) 'template_names': serverNames,
+        if (uploads.isNotEmpty)
+          'template_files': <MultipartFile>[
+            for (final FormTemplateItem template in uploads)
+              MultipartFile.fromBytes(template.bytes!, filename: template.name),
+          ],
         'is_watermark': _state.isWatermark,
         if (_state.password != null && _state.password!.isNotEmpty)
           'password': _state.password,
+        if (_state.outputFormat != null) 'output_format': _state.outputFormat,
       });
       final Response<List<int>> response = await ref
           .read(apiDioProvider)
@@ -365,7 +478,7 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
           status: FormProcessStatus.success,
           resultBytes: result,
           resultName: resultName,
-          message: 'Đã tạo ZIP gồm ${templates.length} biểu mẫu',
+          message: 'Đã tạo ZIP gồm ${selected.length} biểu mẫu',
         );
       });
     } on DioException catch (error) {
@@ -448,14 +561,29 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Text('Chọn biểu mẫu', style: theme.textTheme.titleSmall),
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            'Chọn biểu mẫu',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: busy ? null : _pickTemplates,
+                            icon: const Icon(Icons.upload_file, size: 18),
+                            label: const Text('Tải tệp của bạn'),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 8),
                       if (_state.status == FormProcessStatus.loadingTemplates &&
-                          _state.templates.isEmpty)
+                          _state.templates.isEmpty &&
+                          _uploadedTemplates.isEmpty)
                         const LinearProgressIndicator()
-                      else if (_state.templates.isEmpty)
+                      else if (_state.templates.isEmpty &&
+                          _uploadedTemplates.isEmpty)
                         const Text(
-                          'Thư mục biểu mẫu chưa có PDF, DOCX hoặc DOC.',
+                          'Chưa có biểu mẫu sẵn — bấm "Tải tệp của bạn" để dùng PDF, DOCX hoặc DOC của riêng bạn.',
                         )
                       else
                         Wrap(
@@ -463,14 +591,24 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                           runSpacing: 4,
                           children: <Widget>[
                             for (final FormTemplateItem template
-                                in _state.templates)
+                                in <FormTemplateItem>[
+                                  ..._state.templates,
+                                  ..._uploadedTemplates,
+                                ])
                               FilterChip(
+                                avatar: template.isUploaded
+                                    ? const Icon(Icons.attach_file, size: 16)
+                                    : null,
                                 label: Text(
                                   '${template.name} · ${_sizeLabel(template.sizeBytes)}',
                                 ),
                                 selected: _state.selectedTemplates.contains(
                                   template,
                                 ),
+                                onDeleted: template.isUploaded && !busy
+                                    ? () => _removeUploaded(template)
+                                    : null,
+                                deleteIcon: const Icon(Icons.close, size: 16),
                                 onSelected: busy
                                     ? null
                                     : (bool selected) async {
@@ -491,10 +629,7 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                                           );
                                         });
                                         if (selected) {
-                                          await _loadPreviewPage(
-                                            template.name,
-                                            0,
-                                          );
+                                          await _loadPreviewPage(template, 0);
                                         }
                                       },
                               ),
@@ -582,10 +717,11 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                             if (_state.previewPageCount > 1) ...<Widget>[
                               IconButton(
                                 tooltip: 'Trang trước',
-                                onPressed: _state.previewPage > 0
+                                onPressed:
+                                    _state.previewPage > 0 &&
+                                        _previewItem != null
                                     ? () => _loadPreviewPage(
-                                        _state.previewTemplateName ??
-                                            _state.templates.first.name,
+                                        _previewItem!,
                                         _state.previewPage - 1,
                                       )
                                     : null,
@@ -598,10 +734,10 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                                 tooltip: 'Trang sau',
                                 onPressed:
                                     _state.previewPage + 1 <
-                                        _state.previewPageCount
+                                            _state.previewPageCount &&
+                                        _previewItem != null
                                     ? () => _loadPreviewPage(
-                                        _state.previewTemplateName ??
-                                            _state.templates.first.name,
+                                        _previewItem!,
                                         _state.previewPage + 1,
                                       )
                                     : null,
@@ -664,6 +800,48 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                         ),
                       ],
                       const SizedBox(height: 18),
+                      Text('Định dạng xuất', style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      SegmentedButton<String>(
+                        segments: const <ButtonSegment<String>>[
+                          ButtonSegment<String>(
+                            value: 'auto',
+                            label: Text('Giữ nguyên'),
+                            icon: Icon(Icons.description_outlined, size: 18),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'pdf',
+                            label: Text('PDF'),
+                            icon: Icon(Icons.picture_as_pdf_outlined, size: 18),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'docx',
+                            label: Text('Word'),
+                            icon: Icon(Icons.article_outlined, size: 18),
+                          ),
+                        ],
+                        selected: <String>{_state.outputFormat ?? 'auto'},
+                        onSelectionChanged: busy
+                            ? null
+                            : (Set<String> selection) {
+                                final String value = selection.first;
+                                setState(() {
+                                  _state = _state.copyWith(
+                                    outputFormat: value == 'auto'
+                                        ? null
+                                        : value,
+                                    message: null,
+                                  );
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Chuyển đổi định dạng sẽ dựng lại bố cục tệp — hãy kiểm tra lại trước khi dùng chính thức.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         value: _state.isWatermark,
@@ -680,12 +858,15 @@ class _FormsScreenState extends ConsumerState<FormsScreen> {
                       ),
                       TextField(
                         obscureText: true,
+                        enabled: !busy && _state.outputFormat != 'docx',
                         decoration: const InputDecoration(
-                          labelText: 'Mật khẩu bảo vệ (PDF)',
+                          labelText: 'Mật khẩu bảo vệ (chỉ PDF)',
                           border: OutlineInputBorder(),
                         ),
                         onChanged: (String value) {
-                          _state = _state.copyWith(password: value);
+                          setState(() {
+                            _state = _state.copyWith(password: value);
+                          });
                         },
                       ),
                       const SizedBox(height: 20),
